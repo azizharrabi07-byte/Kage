@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, Modal } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle,
   withTiming, withSequence, Easing, FadeInDown,
@@ -8,6 +8,7 @@ import { GlassContainer } from '@/components/ui/GlassContainer';
 import { KageText } from '@/components/ui/KageText';
 import { KageButton } from '@/components/ui/KageButton';
 import { useColors, spacing } from '@/theme';
+import { SenseiDebrief } from './SenseiDebrief';
 
 interface WorkoutCompleteProps {
   xp: number;
@@ -21,6 +22,7 @@ export function WorkoutComplete({ xp, duration, setsCompleted, onFinish, onGoHom
   const colors = useColors();
   const scale = useSharedValue(0);
   const glow = useSharedValue(0);
+  const [showDebrief, setShowDebrief] = useState(false);
 
   useEffect(() => {
     scale.value = withSequence(
@@ -68,6 +70,16 @@ export function WorkoutComplete({ xp, duration, setsCompleted, onFinish, onGoHom
 
         <Animated.View entering={FadeInDown.delay(600).duration(600)} style={{ width: '100%', gap: 8 }}>
           <KageButton title="CONTINUE JOURNEY" variant="primary" size="lg" fullWidth onPress={onFinish} />
+          
+          {/* Epic Premium Feature: Sensei Debrief */}
+          <KageButton 
+            title="✧ REQUEST SENSEI DEBRIEF" 
+            variant="gold" 
+            size="md" 
+            fullWidth 
+            onPress={() => setShowDebrief(true)} 
+          />
+
           {onGoHome && (
             <KageButton title="GO HOME" variant="ghost" size="sm" fullWidth onPress={onGoHome} />
           )}
@@ -76,6 +88,16 @@ export function WorkoutComplete({ xp, duration, setsCompleted, onFinish, onGoHom
           </KageText>
         </Animated.View>
       </View>
+
+      {/* Premium Sensei Debrief Modal */}
+      <Modal visible={showDebrief} transparent animationType="fade" onRequestClose={() => setShowDebrief(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 }}>
+          <SenseiDebrief 
+            exerciseName="Recent Session" 
+            onClose={() => setShowDebrief(false)} 
+          />
+        </View>
+      </Modal>
     </View>
   );
 }

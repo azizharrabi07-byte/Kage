@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -53,7 +53,13 @@ export default function HomeScreen() {
   return (
     <ScreenContainer safeBottom={false}>
       <SakuraPetals count={5} speed={0.7} />
-      <ScrollView contentContainerStyle={{ paddingTop: 50, paddingHorizontal: spacing.lg }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ 
+        paddingTop: 50, 
+        paddingHorizontal: spacing.lg,
+        maxWidth: Platform.OS === 'web' ? 1100 : undefined,
+        alignSelf: Platform.OS === 'web' ? 'center' : undefined,
+        width: '100%'
+      }} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <Animated.View entering={FadeInDown.delay(80).duration(600).springify()} style={{ marginBottom: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

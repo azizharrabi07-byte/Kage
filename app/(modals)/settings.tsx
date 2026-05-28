@@ -111,12 +111,12 @@ export default function SettingsModal() {
 
           <View>
             <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: 8, textTransform: 'uppercase', marginBottom: 8 }}>
-              Groq API Key
+              GROQ API KEY (for Sensei AI)
             </KageText>
             <TextInput
               value={apiKey}
               onChangeText={setApiKeyState}
-              placeholder="gsk_..."
+              placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
               placeholderTextColor={colors.text.muted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -129,6 +129,9 @@ export default function SettingsModal() {
                 fontFamily: 'monospace',
               }}
             />
+            <KageText variant="caption" style={{ fontSize: 8, color: colors.text.muted, marginTop: 4 }}>
+              Get free key at console.groq.com → used for intelligent Sensei chat + smart program recommendations
+            </KageText>
           </View>
 
           <View>

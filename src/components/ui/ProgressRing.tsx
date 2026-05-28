@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
+import { View, StyleSheet, type ViewStyle, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import Animated, { useSharedValue, useAnimatedProps, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedProps, withSpring } from 'react-native-reanimated';
 import { KageText } from './KageText';
 import { useColors, spacing } from '@/theme';
 
@@ -16,6 +16,7 @@ interface ProgressRingProps {
   style?: ViewStyle;
   format?: 'percent' | 'number';
   animate?: boolean;
+  showGlow?: boolean; // nicer on desktop/web
 }
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -31,6 +32,7 @@ export function ProgressRing({
   style,
   format = 'percent',
   animate = true,
+  showGlow = Platform.OS === 'web',
 }: ProgressRingProps) {
   const colors = useColors();
   const ringColor = propColor || colors.accent.primary;
@@ -43,7 +45,7 @@ export function ProgressRing({
 
   useEffect(() => {
     if (animate) {
-      progress.value = withSpring(targetOffset, { damping: 15, stiffness: 80 });
+      progress.value = withSpring(targetOffset, { damping: 18, stiffness: 95, mass: 0.8 });
     } else {
       progress.value = targetOffset;
     }
@@ -53,36 +55,81 @@ export function ProgressRing({
     strokeDashoffset: progress.value,
   }));
 
+  // Desktop/web friendly stroke width
+  const effectiveStroke = Platform.OS === 'web' ? Math.max(strokeWidth, size * 0.07) : strokeWidth;
+
   return (
     <View style={[styles.container, style]}>
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+          {/* Background track */}
           <Circle
-            cx={size / 2} cy={size / 2} r={radius}
+            cx={size / 2} 
+            cy={size / 2} 
+            r={radius}
             stroke={colors.glass.border}
-            strokeWidth={strokeWidth}
+            strokeWidth={effectiveStroke}
             fill="none"
+            opacity={0.6}
           />
+          {/* Progress ring */}
           <AnimatedCircle
-            cx={size / 2} cy={size / 2} r={radius}
+            cx={size / 2} 
+            cy={size / 2} 
+            r={radius}
             stroke={ringColor}
-            strokeWidth={strokeWidth}
+            strokeWidth={effectiveStroke}
             fill="none"
             strokeDasharray={circumference}
             strokeLinecap="round"
-            rotation="-90"
-            origin={`${size / 2}, ${size / 2}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
             animatedProps={animatedProps}
+            // Subtle glow on web/desktop
+            strokeOpacity={showGlow ? 0.95 : 1}
           />
         </Svg>
+
         <View style={styles.centerContent}>
-          <KageText variant="mono" color={ringColor} style={{ fontSize: size * 0.26, lineHeight: size * 0.3 }}>
+          <KageText 
+            variant="mono" 
+            color={ringColor} 
+            style={{ 
+              fontSize: size * 0.28, 
+              lineHeight: size * 0.32,
+              fontWeight: Platform.OS === 'web' ? '600' : '400'
+            }}
+          >
             {format === 'percent' ? `${Math.round(percentage * 100)}%` : Math.round(value).toString()}
           </KageText>
         </View>
       </View>
-      {label && <KageText variant="caption" align="center" style={{ marginTop: spacing.xs }}>{label}</KageText>}
-      {subtitle && <KageText variant="caption" align="center" style={{ fontSize: 9, marginTop: 1, opacity: 0.4 }}>{subtitle}</KageText>}
+
+      {label && (
+        <KageText 
+          variant="caption" 
+          align="center" 
+          style={{ 
+            marginTop: spacing.xs, 
+            fontSize: Platform.OS === 'web' ? 11 : 10,
+            letterSpacing: 0.5
+          }}
+        >
+          {label}
+        </KageText>
+      )}
+      {subtitle && (
+        <KageText 
+          variant="caption" 
+          align="center" 
+          style={{ 
+            fontSize: 9, 
+            marginTop: 1, 
+            opacity: 0.45 
+          }}
+        >
+          {subtitle}
+        </KageText>
+      )}
     </View>
   );
 }

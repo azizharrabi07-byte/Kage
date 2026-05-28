@@ -247,13 +247,33 @@ export default function ProfileScreen() {
           </ExpandableSection>
         </AnimatedView.View>
 
-        {/* Expandable: Feed */}
-        <ExpandableSection title="Social Feed" icon="💬">
+        {/* Premium Movement Intelligence - High Impact Feature */}
+        <AnimatedView.View entering={FadeInDown.delay(380).duration(600)} style={{ marginBottom: 16 }}>
+          <GlassContainer accentTop accentColor={colors.accent.gold} padding={spacing.lg} style={{ borderRadius: 14 }}>
+            <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: 8, textTransform: 'uppercase', marginBottom: 8 }}>
+              LONG-TERM INTELLIGENCE
+            </KageText>
+            <KageText variant="bodyBold" style={{ fontSize: 16, marginBottom: 4 }}>Movement Report</KageText>
+            <KageText variant="caption" color={colors.text.muted} style={{ marginBottom: 12 }}>
+              Sensei analyzes your form patterns across sessions and gives you a premium coaching report.
+            </KageText>
+            <KageButton 
+              title="VIEW MY MOVEMENT REPORT" 
+              variant="gold" 
+              size="md" 
+              fullWidth 
+              onPress={() => router.push('/movement-report')} 
+            />
+          </GlassContainer>
+        </AnimatedView.View>
+
+        {/* Expandable: Recent Activity (see full Feed tab for posting) */}
+        <ExpandableSection title="Recent Feats" icon="📜">
           <View style={{ gap: spacing.sm }}>
             {posts.length === 0 ? (
-              <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11 }}>No posts yet — complete a workout to share!</KageText>
+              <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11 }}>No posts yet. Use the new FEED tab to share messages!</KageText>
             ) : (
-              posts.slice(0, 10).map(post => (
+              posts.slice(0, 5).map(post => (
                 <GlassContainer key={post.id} intensity="light" padding={spacing.md} glow="subtle">
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
                     <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.glass.medium, alignItems: 'center', justifyContent: 'center' }}>

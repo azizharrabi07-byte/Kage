@@ -14,6 +14,7 @@ import { PoseAnalyzer } from '@/components/workout/PoseAnalyzer';
 import { SenseiReview } from '@/components/workout/SenseiReview';
 import { RestTimer } from '@/components/workout/Timer';
 import { WorkoutComplete } from '@/components/workout/WorkoutComplete';
+import { CustomPlanCreator } from '@/components/workout/CustomPlanCreator';
 import { GlassContainer } from '@/components/ui/GlassContainer';
 import { Sensei } from '@/components/coach/Sensei';
 import { InkDivider } from '@/components/japanese/InkDivider';
@@ -45,6 +46,7 @@ export default function WorkoutScreen() {
   const [completedSetId, setCompletedSetId] = useState<string | null>(null);
   const [reviewData, setReviewData] = useState<{ baseXP: number; finalXP: number; mastery: any; message: string } | null>(null);
   const [showComplete, setShowComplete] = useState(false);
+  const [showCustomPlan, setShowCustomPlan] = useState(false);
   const [analyzingEx, setAnalyzingEx] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<WorkoutSession | null>(null);

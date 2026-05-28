@@ -1,5 +1,9 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
+// Simple client-side rate limit protection
+let lastCallTime = 0;
+const MIN_TIME_BETWEEN_CALLS = 1200; // ~1.2s minimum between calls
+
 async function callGroqAPI(messages: Array<any>, maxTokens = 800): Promise<string | null> {
   try {
     const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
@@ -7,7 +11,14 @@ async function callGroqAPI(messages: Array<any>, maxTokens = 800): Promise<strin
       console.error('Groq API key missing. Set EXPO_PUBLIC_GROQ_API_KEY in .env');
       return null;
     }
-    
+
+    // Basic rate limit protection
+    const now = Date.now();
+    if (now - lastCallTime < MIN_TIME_BETWEEN_CALLS) {
+      return null; // Too soon, let caller use fallback
+    }
+    lastCallTime = now;
+
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -18,12 +29,13 @@ async function callGroqAPI(messages: Array<any>, maxTokens = 800): Promise<strin
         model: 'llama-3.3-70b-versatile',
         messages,
         max_tokens: maxTokens,
-        temperature: 0.8,
+        temperature: 0.75,
       }),
     });
     
     if (res.status === 429) {
-      console.error('Groq API rate limited. Please wait a moment.');
+      console.warn('Groq rate limited. Backing off...');
+      lastCallTime = Date.now() + 8000; // extra backoff
       return null;
     }
     if (!res.ok) {
@@ -160,9 +172,16 @@ export async function callSenseiAI(system: string, prompt: string): Promise<stri
     sessionHistory.push({ role: 'assistant', content: response });
     return response;
   }
-  return `Greetings, warrior. I am Sensei. I have trained champions and beginners alike. 
-  Today, I hear silence from the network. But my ears are open. 
-  What brings you to the dojo today? Share your training, your struggles, or simply say hello. I am here.`;
+
+  // Context-aware fallback instead of always the same greeting
+  const lastUserMessage = prompt.toLowerCase();
+  if (lastUserMessage.includes('angle') || lastUserMessage.includes('form') || lastUserMessage.includes('rep')) {
+    return 'Focus on the current rep. Control the eccentric. What does your body tell you right now?';
+  }
+  if (lastUserMessage.includes('hello') || lastUserMessage.includes('hi') || lastUserMessage.includes('sensei')) {
+    return 'The dojo is open. What brings you here today, warrior?';
+  }
+  return 'The path is quiet for a moment. Breathe. What do you need guidance on right now?';
 }
 
 export function clearSenseiHistory(): void {

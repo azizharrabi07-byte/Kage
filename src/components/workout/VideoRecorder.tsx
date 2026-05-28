@@ -4,7 +4,6 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { GlassContainer } from '@/components/ui/GlassContainer';
 import { KageText } from '@/components/ui/KageText';
 import { useColors, spacing } from '@/theme';
-import { getApiKey } from '@/constants/config';
 import { getFormChecks } from '@/constants/formChecks';
 
 interface VideoRecorderProps {
@@ -33,7 +32,7 @@ export function VideoRecorder({ exerciseName, onFrame, onAnalysis, programStyle 
 
   function startRecording() {
     setMode('recording');
-    navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 400, facingMode: 'user' } })
+    navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 400, facingMode: 'environment' } })
       .then((stream) => {
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
@@ -100,41 +99,16 @@ export function VideoRecorder({ exerciseName, onFrame, onAnalysis, programStyle 
     setMode('analyzing');
     setFeedback('');
     try {
-      const apiKey = await getApiKey();
-      if (!apiKey) {
-        setFeedback('No API key configured.');
-        setMode('idle');
-        return;
-      }
+      // NOTE: Full vision-based form analysis from static video is not available in this build
+      // (requires vision LLM + backend). Use the live Pose Analyzer during sets for real-time
+      // MediaPipe pose tracking, rep counting, and Sensei coaching.
       const checks = getFormChecks(exerciseName);
-      const critChecks = checks.filter(c => c.priority === 'critical').map(c => c.question);
-      const allChecks = checks.map(c => c.question);
-
-      const res = await fetch('/api/groq', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          image: base64.split(',')[1],
-          system: 'You are a strict content classifier and gym form coach. First determine if the image shows a person exercising in a gym/doing a workout. If it is NOT a gym/exercise image (e.g. car, game, food, landscape, etc.), respond with exactly: REJECTED: [reason]. If it IS a gym/exercise image, analyze the form using ✓ and ✗. Give 2-3 short sentences. Prioritize critical safety issues.',
-          prompt: `CLASSIFY FIRST: Does this image show a person doing the exercise "${exerciseName}" in a gym/fitness context? If NO, respond with REJECTED: <reason>. If YES, analyze:\n\nProgram style: ${programStyle || 'General'}\n\nCRITICAL:\n${critChecks.map(c => `  · ${c}`).join('\n')}\n\nChecks:\n${allChecks.map(c => `  · ${c}`).join('\n')}`,
-        }),
-      });
-      const data = await res.json();
-      const rawText = data.text || data.choices?.[0]?.message?.content || '';
-
-      // Check if the AI rejected it as non-gym content
-      if (rawText.trim().toUpperCase().startsWith('REJECTED:')) {
-        const rejectReason = rawText.replace(/^REJECTED:\s*/i, '');
-        setFeedback(`✗ Not a gym workout: ${rejectReason}`);
-        setMode('idle');
-        return;
-      }
-
-      setFeedback(rawText || 'Form analysis complete.');
-      onAnalysis(rawText);
+      const tips = checks.slice(0, 3).map(c => c.cue || c.question).join(' • ');
+      const fallback = `Frame captured. For best results use live camera analysis. Key cues: ${tips || 'Control the movement. Brace core. Full ROM.'}`;
+      setFeedback(fallback);
+      onAnalysis(fallback);
     } catch {
-      setFeedback('Analysis failed. Check your connection.');
+      setFeedback('Analysis unavailable. Rely on live Pose Analyzer for form feedback.');
     }
     setMode('idle');
   }

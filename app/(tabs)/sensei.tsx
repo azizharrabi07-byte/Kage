@@ -8,6 +8,7 @@ import { InkDivider } from '@/components/japanese/InkDivider';
 import { useColors, spacing } from '@/theme';
 import { getProgression } from '@/store/progressionStore';
 import { callSenseiAI } from '@/utils/gemini';
+import { getChronicWeaknesses } from '@/store/movementIntelligence';
 
 interface ChatMessage {
   role: 'user' | 'model';
@@ -24,7 +25,13 @@ const QUICK_ACTIONS = [
   '🏆 Motivation',
 ];
 
-const SYSTEM_PROMPT = `You are Sensei, a wise and warm martial arts and fitness coach with decades of experience. You speak with discipline but genuine warmth. You use Japanese martial arts concepts naturally (but not excessively). You are CONVERSATIONAL — you chat like a real person. When someone says "hi", you greet them warmly and ask what they want to work on today. You give SHORT, actionable advice (1-3 sentences max). You remember the conversation context. No lectures. No generic platitudes. Be specific and helpful.`;
+const SYSTEM_PROMPT = `You are Sensei, a wise and warm martial arts and fitness coach with decades of experience. You speak with discipline but genuine warmth. You use Japanese martial arts concepts naturally (but not excessively). You are CONVERSATIONAL — you chat like a real person. 
+
+When someone says "hi", you greet them warmly and ask what they want to work on today. 
+
+You give SHORT, actionable advice (1-3 sentences max). You remember the conversation context. No lectures. No generic platitudes. Be specific and helpful.
+
+IMPORTANT: You have long-term memory of this warrior's movement patterns and chronic weaknesses. If relevant, gently reference patterns you've noticed in their training without being repetitive. Offer guidance that helps them overcome recurring issues over time.`;
 
 export default function SenseiCoachScreen() {
   const colors = useColors();
@@ -49,10 +56,14 @@ export default function SenseiCoachScreen() {
     setLoading(true);
 
     try {
-      // Build conversation history
-      const history = messages.map(m => ({ role: m.role, content: m.text }));
-      const reply = await callSenseiAI(SYSTEM_PROMPT, text.trim(), messages.map(m => ({ role: m.role, content: m.text })));
-      setMessages(prev => [...prev, { role: 'model', text: reply, time: Date.now() }]);
+      // Inject user's chronic movement weaknesses for personalized coaching (high priority)
+      const chronic = await getChronicWeaknesses();
+      const enhancedSystem = chronic.length > 0 
+        ? `${SYSTEM_PROMPT}\n\nIMPORTANT: This warrior has shown these recurring movement issues in past sessions: ${chronic.join(', ')}. Reference these patterns when relevant and coach with long-term awareness.`
+        : SYSTEM_PROMPT;
+
+      const reply = await callSenseiAI(enhancedSystem, text.trim());
+      setMessages(prev => [...prev, { role: 'model', text: reply || 'The path is silent. Try again, warrior.', time: Date.now() }]);
     } catch {
       setMessages(prev => [...prev, {
         role: 'model',
@@ -66,7 +77,14 @@ export default function SenseiCoachScreen() {
   return (
     <ScreenContainer>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={{ paddingTop: 50, paddingHorizontal: spacing.lg, flex: 1 }}>
+        <View style={{ 
+          paddingTop: 50, 
+          paddingHorizontal: spacing.lg, 
+          flex: 1,
+          maxWidth: Platform.OS === 'web' ? 720 : undefined,
+          alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
+          width: '100%'
+        }}>
           {/* Header */}
           <Animated.View entering={FadeInDown.duration(400)} style={{ alignItems: 'center', marginBottom: spacing.sm }}>
             <KageText variant="kanji" style={{ fontSize: 32, color: colors.accent.primary, opacity: 0.2 }}>師</KageText>

@@ -11,6 +11,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const tabs = [
   { name: 'index', title: 'Home', icon: '▣' },
+  { name: 'feed', title: 'Feed', icon: '✉' },
   { name: 'sensei', title: 'Sensei', icon: '⟡' },
   { name: 'workout', title: 'Train', icon: '⚡' },
   { name: 'profile', title: 'Soul', icon: '◎' },
@@ -33,7 +34,7 @@ export default function TabLayout() {
 
   function updateIndicator(tabIndex: number) {
     'worklet';
-    indicatorOffset.value = tabIndex * 25;
+    indicatorOffset.value = tabIndex * 20; // adjusted for 5 tabs
   }
 
   return (
