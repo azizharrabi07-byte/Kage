@@ -55,7 +55,7 @@ export function SenseiDebrief({ exerciseName, onClose }: SenseiDebriefProps) {
           </KageText>
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: spacing.md }}>
-            <KageButton title="CLOSE" variant="ghost" onPress={onClose} style={{ flex: 1 }} />
+            <KageButton title="CLOSE" variant="ghost" onPress={() => onClose?.()} style={{ flex: 1 }} />
             <KageButton 
               title="ANOTHER REFLECTION" 
               variant="primary" 

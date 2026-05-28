@@ -20,6 +20,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="lock-in" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
+            <Stack.Screen name="diet" options={{ title: 'Diet', presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="(modals)/settings" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
         </GestureHandlerRootView>

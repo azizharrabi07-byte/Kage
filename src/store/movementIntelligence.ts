@@ -21,7 +21,18 @@ const STORAGE_KEY = 'kage_movement_profile';
 
 export async function getMovementProfile(): Promise<MovementProfile> {
   const cfg = await apiGetConfig();
-  return cfg.movementProfile || {
+  const profile = cfg?.movementProfile;
+  
+  if (profile && typeof profile === 'object') {
+    return {
+      insights: profile.insights || {},
+      chronicWeaknesses: profile.chronicWeaknesses || [],
+      lastUpdated: profile.lastUpdated || Date.now(),
+    };
+  }
+  
+  // Safe default
+  return {
     insights: {},
     chronicWeaknesses: [],
     lastUpdated: Date.now(),
@@ -62,8 +73,9 @@ export async function saveMovementInsight(exercise: string, issues: string[], st
   profile.lastUpdated = Date.now();
 
   const cfg = await apiGetConfig();
-  cfg.movementProfile = profile;
-  await apiSaveConfig(cfg);
+  const safeCfg = cfg || {};
+  safeCfg.movementProfile = profile;
+  await apiSaveConfig(safeCfg);
 
   return profile;
 }

@@ -1,35 +1,41 @@
-// Exercise Demo Photos / Images
-// Recommended: Put photos in assets/images/exercises/
-// For now we are using assets/gifs/ — you can move later.
-// The filename in require() MUST match the actual file name EXACTLY.
+// Exercise Demo Photos (Professional standard)
+// User is providing clean photos. Place them in assets/images/exercises/
+// Use exact names from the list below.
 
 export const exerciseDemos: Record<string, any> = {
-  // === Tier 1 ===
-  'Iron Squat': require('../../assets/gifs/Iron Squat.gif'),
-  'Steel Deadlift': require('../../assets/gifs/steel deadlift (2).gif'),
-  'Shadow Push': require('../../assets/gifs/shadow push.gif'),
-  'Samurai Row': require('../../assets/gifs/Samurai Row.gif'),
-  'Ronin Lunge': require('../../assets/gifs/Ronin Lunge.gif'),
+  // === Mapped to files you actually uploaded ===
+  'Iron Squat': require('../../assets/images/exercises/iron-squat.jpg'),
+  'Steel Deadlift': require('../../assets/images/exercises/steel-daedlift.jpg'),   // note: filename typo kept as uploaded
+  'Shadow Push': require('../../assets/images/exercises/shadow-push.jpg'),
+  'Samurai Row': require('../../assets/images/exercises/samurai-row.jpg'),
+  'Ronin Lunge': require('../../assets/images/exercises/ronin-lunge.jpg'),
 
-  // === Tier 2 ===
-  'Warrior Pull-up': require('../../assets/gifs/Warrior Pull-up.gif'),
-  'Crimson Press': require('../../assets/gifs/Crimson Press .gif'),
-  'Blade Curl': require('../../assets/gifs/Blade Curl  .gif'),
-  'Dojo Dip': require('../../assets/gifs/Dojo Dip .gif'),
-  'Dragon Squat': require('../../assets/gifs/Dragon Squat .gif'),
-  'Silent Plank': require('../../assets/gifs/Silent Plank  .gif'),
+  'Crimson Press': require('../../assets/images/exercises/crismon-press.jpg'),   // note: filename typo kept as uploaded
+  'Blade Curl': require('../../assets/images/exercises/blade-curl.jpg'),
+  'Dojo Dip': require('../../assets/images/exercises/dojo-dip.jpg'),
+  'Dragon Squat': require('../../assets/images/exercises/dragon-squat.jpg'),
+  'Silent Plank': require('../../assets/images/exercises/silent-plank.jpg'),
+
+  'Eastern Hinge': require('../../assets/images/exercises/eastern-hinge.jpg'),
+  'Iron Draw': require('../../assets/images/exercises/iron-draw.jpg'),
 };
 
-// Helper function
+// Helper function - now wired to your uploaded photos
 export function getExerciseDemo(exerciseName: string): any {
   try {
     const result = exerciseDemos[exerciseName];
-    if (!result) {
-      console.warn(`[ExerciseDemo] No photo found for: "${exerciseName}"`);
+    if (result) {
+      return result;
     }
-    return result || null;
+    // Fallback: try common variations
+    const variations = [
+      exerciseName.toLowerCase().replace(/\s+/g, '-'),
+      exerciseName.replace(/\s+/g, '-'),
+    ];
+    console.warn(`[Kage Photos] No exact match for "${exerciseName}". Consider adding it.`);
+    return null;
   } catch (e) {
-    console.error(`[ExerciseDemo] Failed to load photo for "${exerciseName}":`, e);
+    console.warn(`[Kage Photos] Failed to load photo for: ${exerciseName}`);
     return null;
   }
 }

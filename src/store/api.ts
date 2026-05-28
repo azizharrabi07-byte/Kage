@@ -135,11 +135,13 @@ export async function apiDeleteFood(id: string): Promise<void> {
 
 // ── Config ───────────────────────────────────────────────────────────────
 export async function apiGetConfig(): Promise<any> {
-  return get<any>(STORAGE_KEYS.CONFIG, null);
+  const result = get<any>(STORAGE_KEYS.CONFIG, null);
+  return result || {};   // Never return null — prevents crashes in movementIntelligence
 }
 export async function apiSaveConfig(config: any): Promise<any> {
-  set(STORAGE_KEYS.CONFIG, config);
-  return config;
+  const safeConfig = config || {};
+  set(STORAGE_KEYS.CONFIG, safeConfig);
+  return safeConfig;
 }
 
 // ── Program ──────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, ScrollView, TextInput, Animated as RNAnimated, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, ScrollView, TextInput, Animated as RNAnimated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import AnimatedView, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -16,6 +16,24 @@ import { getDayTotals, type DayTotals } from '@/store/nutritionStore';
 import { calculateMacros } from '@/constants/nutritionGoals';
 import type { PlayerProgression } from '@/components/progression/types';
 import type { WorkoutSession } from '@/store/types';
+
+// Responsive breakpoints
+const BREAKPOINTS = {
+  mobile: 0,
+  tablet: 768,
+  desktop: 1024,
+  wide: 1440,
+};
+
+function useResponsive() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < BREAKPOINTS.tablet;
+  const isTablet = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
+  const isDesktop = width >= BREAKPOINTS.desktop;
+  const isWide = width >= BREAKPOINTS.wide;
+  
+  return { isMobile, isTablet, isDesktop, isWide, width };
+}
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -65,6 +83,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const { mode, toggleTheme } = useTheme();
   const router = useRouter();
+  const { isMobile, isTablet, isDesktop, isWide, width } = useResponsive();
   const [prog, setProg] = useState<PlayerProgression | null>(null);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -131,10 +150,16 @@ export default function ProfileScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ paddingTop: 50, paddingHorizontal: spacing.lg }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ 
+        paddingTop: isDesktop ? 60 : 50, 
+        paddingHorizontal: isDesktop ? spacing.xl * 2 : spacing.lg,
+        maxWidth: isWide ? 1400 : isDesktop ? 1200 : isTablet ? 900 : undefined,
+        alignSelf: isDesktop ? 'center' : undefined,
+        width: '100%'
+      }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <AnimatedView.View entering={FadeInDown.delay(80).duration(600)} style={{ marginBottom: 16, alignItems: 'center' }}>
-          <KageText variant="caption" letterSpacing={3} color={colors.accent.gold} style={{ fontSize: 8, textTransform: 'uppercase', marginBottom: 4 }}>
+          <KageText variant="caption" letterSpacing={3} color={colors.accent.gold} style={{ fontSize: isDesktop ? 10 : 8, textTransform: 'uppercase', marginBottom: 4 }}>
             The story of a warrior
           </KageText>
           <KageText variant="h3" letterSpacing={4}>SOUL</KageText>
@@ -165,15 +190,26 @@ export default function ProfileScreen() {
 
         {/* Journey Stats */}
         <AnimatedView.View entering={FadeInDown.delay(240).duration(600)} style={{ marginBottom: 16 }}>
-          <GlassContainer accentTop accentColor={colors.accent.gold} padding={spacing.lg} style={{ borderRadius: 14 }}>
-            <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: 7.5, textTransform: 'uppercase', marginBottom: 12 }}>
+          <GlassContainer accentTop accentColor={colors.accent.gold} padding={isDesktop ? spacing.xl : spacing.lg} style={{ borderRadius: 14 }}>
+            <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: isDesktop ? 9 : 7.5, textTransform: 'uppercase', marginBottom: 12 }}>
               Journey Stats
             </KageText>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <View style={{ 
+              flexDirection: 'row', 
+              flexWrap: 'wrap', 
+              gap: isDesktop ? 12 : 8,
+              justifyContent: isDesktop ? 'center' : 'flex-start',
+            }}>
               {stats.map((s, i) => (
-                <View key={i} style={{ width: '30%', alignItems: 'center', gap: 4, paddingVertical: 8 }}>
-                  <KageText variant="mono" color={s.color} style={{ fontSize: 18 }}>{s.value}</KageText>
-                  <KageText variant="caption" style={{ fontSize: 7.5, letterSpacing: 1, color: colors.text.muted, textTransform: 'uppercase' }}>{s.label}</KageText>
+                <View key={i} style={{ 
+                  width: isDesktop ? '14%' : '30%', 
+                  minWidth: isDesktop ? 86 : undefined,
+                  alignItems: 'center', 
+                  gap: 4, 
+                  paddingVertical: isDesktop ? 12 : 8 
+                }}>
+                  <KageText variant="mono" color={s.color} style={{ fontSize: isDesktop ? 24 : 18 }}>{s.value}</KageText>
+                  <KageText variant="caption" style={{ fontSize: isDesktop ? 9 : 7.5, letterSpacing: 1, color: colors.text.muted, textTransform: 'uppercase' }}>{s.label}</KageText>
                 </View>
               ))}
             </View>
@@ -271,7 +307,14 @@ export default function ProfileScreen() {
         <ExpandableSection title="Recent Feats" icon="📜">
           <View style={{ gap: spacing.sm }}>
             {posts.length === 0 ? (
-              <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11 }}>No posts yet. Use the new FEED tab to share messages!</KageText>
+              <View>
+                <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11, marginBottom: 8 }}>
+                  Your clan has not heard your voice yet.
+                </KageText>
+                <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 10 }}>
+                  Go to the FEED tab and share your first victory, question, or fire.
+                </KageText>
+              </View>
             ) : (
               posts.slice(0, 5).map(post => (
                 <GlassContainer key={post.id} intensity="light" padding={spacing.md} glow="subtle">
@@ -349,6 +392,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: spacing.sm }}>
                   <KageButton title="📷 LOG MEAL" variant="gold" size="sm" onPress={() => setShowMealLogger(true)} style={{ flex: 1 }} />
+              <KageButton title="OPEN FULL DIET" variant="ghost" size="sm" onPress={() => router.push('/diet')} style={{ flex: 1 }} />
                 </View>
                 {nutritionTotals.entries.length > 0 && (
                   <View style={{ gap: 4, marginTop: spacing.sm }}>
@@ -369,7 +413,12 @@ export default function ProfileScreen() {
               </>
             )}
             {!nutritionTotals && (
-              <KageButton title="📷 LOG FIRST MEAL" variant="gold" size="sm" onPress={() => setShowMealLogger(true)} />
+              <View>
+                <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11, marginBottom: 8 }}>
+                  No meals logged today. Tracking your fuel is how you become unstoppable.
+                </KageText>
+                <KageButton title="📷 LOG FIRST MEAL" variant="gold" size="sm" onPress={() => setShowMealLogger(true)} />
+              </View>
             )}
           </View>
         </ExpandableSection>

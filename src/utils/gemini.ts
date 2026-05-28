@@ -1,29 +1,34 @@
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
-// Simple client-side rate limit protection
+// === Sensei Reliability Layer (Professional-grade for real users) ===
 let lastCallTime = 0;
-const MIN_TIME_BETWEEN_CALLS = 1200; // ~1.2s minimum between calls
+let consecutiveFailures = 0;
+const MIN_TIME_BETWEEN_CALLS = 1200; // Reduced for better chat UX
+const MAX_BACKOFF = 18000;
 
-async function callGroqAPI(messages: Array<any>, maxTokens = 800): Promise<string | null> {
+const responseCache = new Map<string, { response: string; timestamp: number }>();
+const CACHE_TTL = 45000;
+
+const pendingRequests = new Map<string, Promise<string | null>>();
+
+// Force clear rate limiting state (used when user explicitly retries)
+export function resetSenseiRateLimit() {
+  lastCallTime = 0;
+  consecutiveFailures = 0;
+  pendingRequests.clear();
+}
+
+function getCacheKey(messages: Array<any>): string {
+  return JSON.stringify(messages.slice(-3)); // Use last 3 messages as cache key
+}
+
+async function tryGroqWithKey(apiKey: string, messages: Array<any>, maxTokens: number): Promise<{ok: boolean; response: string | null; rateLimited: boolean; authError: boolean}> {
   try {
-    const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
-    if (!GROQ_API_KEY || GROQ_API_KEY.length < 50) {
-      console.error('Groq API key missing. Set EXPO_PUBLIC_GROQ_API_KEY in .env');
-      return null;
-    }
-
-    // Basic rate limit protection
-    const now = Date.now();
-    if (now - lastCallTime < MIN_TIME_BETWEEN_CALLS) {
-      return null; // Too soon, let caller use fallback
-    }
-    lastCallTime = now;
-
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -32,23 +37,104 @@ async function callGroqAPI(messages: Array<any>, maxTokens = 800): Promise<strin
         temperature: 0.75,
       }),
     });
-    
+
     if (res.status === 429) {
-      console.warn('Groq rate limited. Backing off...');
-      lastCallTime = Date.now() + 8000; // extra backoff
-      return null;
+      return { ok: false, response: null, rateLimited: true, authError: false };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, response: null, rateLimited: false, authError: true };
     }
     if (!res.ok) {
       const errorText = await res.text();
       console.error('Groq API error:', res.status, errorText);
-      return null;
+      return { ok: false, response: null, rateLimited: false, authError: false };
     }
-    
+
     const data = await res.json();
-    return data.choices?.[0]?.message?.content || null;
+    const response = data.choices?.[0]?.message?.content || null;
+    return { ok: true, response, rateLimited: false, authError: false };
   } catch (err) {
     console.error('Groq network error:', err);
-    return null;
+    return { ok: false, response: null, rateLimited: false, authError: false };
+  }
+}
+
+// === Highly Reliable Sensei API Caller (Roundtable #1 priority) ===
+export async function callGroqAPI(messages: Array<any>, maxTokens = 800, forceFresh = false): Promise<{ text: string | null; reason: string }> {
+  try {
+    const PRIMARY_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+    const BACKUP_KEY = process.env.EXPO_PUBLIC_GROQ_BACKUP_API_KEY;
+
+    const hasPrimary = PRIMARY_KEY && PRIMARY_KEY.length >= 50;
+    const hasBackup = BACKUP_KEY && BACKUP_KEY.length >= 50;
+
+    if (!hasPrimary && !hasBackup) {
+      return { text: null, reason: 'NO_KEYS' };
+    }
+
+    const cacheKey = getCacheKey(messages);
+    
+    if (!forceFresh) {
+      const cached = responseCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return { text: cached.response, reason: 'CACHED' };
+      }
+      if (pendingRequests.has(cacheKey)) {
+        const result = await pendingRequests.get(cacheKey)!;
+        return { text: result, reason: 'DEDUPE' };
+      }
+    }
+
+    // Much gentler rate limiting for actual chat usage
+    const now = Date.now();
+    const backoffTime = forceFresh ? 0 : Math.min(MIN_TIME_BETWEEN_CALLS * Math.pow(1.6, consecutiveFailures), MAX_BACKOFF);
+    
+    if (!forceFresh && now - lastCallTime < backoffTime) {
+      return { text: null, reason: 'RATE_LIMIT' };
+    }
+    
+    lastCallTime = now;
+
+    const requestPromise = (async () => {
+      const keysToTry = [];
+      if (hasPrimary) keysToTry.push({ key: PRIMARY_KEY!, label: 'primary' });
+      if (hasBackup) keysToTry.push({ key: BACKUP_KEY!, label: 'backup' });
+
+      for (const { key, label } of keysToTry) {
+        const res = await tryGroqWithKey(key, messages, maxTokens);
+        
+        if (res.ok && res.response) {
+          responseCache.set(cacheKey, { response: res.response, timestamp: Date.now() });
+          consecutiveFailures = 0;
+          console.log(`[Sensei] Success using ${label} key`);
+          return res.response;
+        }
+        
+        if (res.rateLimited) {
+          console.warn(`[Sensei] Rate limited on ${label}`);
+          consecutiveFailures = Math.min(consecutiveFailures + 1, 4);
+        } else if (res.authError) {
+          console.error(`[Sensei] Auth error on ${label} key`);
+        } else {
+          consecutiveFailures = Math.min(consecutiveFailures + 1, 4);
+        }
+      }
+
+      return null;
+    })();
+
+    pendingRequests.set(cacheKey, requestPromise);
+    const finalText = await requestPromise;
+    pendingRequests.delete(cacheKey);
+
+    if (finalText) {
+      return { text: finalText, reason: 'SUCCESS' };
+    }
+    return { text: null, reason: 'ALL_KEYS_FAILED' };
+
+  } catch (err) {
+    console.error('[Sensei] Unexpected error in callGroqAPI', err);
+    return { text: null, reason: 'NETWORK_ERROR' };
   }
 }
 
@@ -161,27 +247,34 @@ Challenge excuses. Celebrate wins. Be the coach they need right now.`;
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-export async function callSenseiAI(system: string, prompt: string): Promise<string | null> {
+export async function callSenseiAI(system: string, prompt: string, forceFresh = false): Promise<{ reply: string; success: boolean; reason?: string }> {
   sessionHistory.push({ role: 'user', content: prompt });
   if (sessionHistory.length > 20) sessionHistory = sessionHistory.slice(-20);
   
   const messages = getMessages(system || CONVERSATION_PROMPT, prompt);
-  const response = await callGroqAPI(messages, 800);
+  const result = await callGroqAPI(messages, 820, forceFresh);
   
-  if (response) {
-    sessionHistory.push({ role: 'assistant', content: response });
-    return response;
+  if (result.text) {
+    sessionHistory.push({ role: 'assistant', content: result.text });
+    return { reply: result.text, success: true };
   }
 
-  // Context-aware fallback instead of always the same greeting
   const lastUserMessage = prompt.toLowerCase();
-  if (lastUserMessage.includes('angle') || lastUserMessage.includes('form') || lastUserMessage.includes('rep')) {
-    return 'Focus on the current rep. Control the eccentric. What does your body tell you right now?';
-  }
+  let fallback = 'The path is quiet for a moment. Breathe. What do you need guidance on right now?';
+
   if (lastUserMessage.includes('hello') || lastUserMessage.includes('hi') || lastUserMessage.includes('sensei')) {
-    return 'The dojo is open. What brings you here today, warrior?';
+    fallback = 'The dojo is open. What brings you here today, warrior?';
+  } else if (lastUserMessage.includes('form') || lastUserMessage.includes('angle') || lastUserMessage.includes('rep')) {
+    fallback = 'Control the eccentric. Tell me exactly what you feel in this rep.';
+  } else if (lastUserMessage.includes('eat') || lastUserMessage.includes('diet') || lastUserMessage.includes('protein')) {
+    fallback = 'Protein first. Then we talk timing and portions. What is your goal right now?';
+  } else if (result.reason === 'RATE_LIMIT') {
+    fallback = 'Sensei is catching his breath. Wait 2 seconds and ask again, warrior.';
+  } else if (result.reason === 'NO_KEYS' || result.reason === 'ALL_KEYS_FAILED') {
+    fallback = 'The old master cannot speak. Check your Groq API keys in the .env file.';
   }
-  return 'The path is quiet for a moment. Breathe. What do you need guidance on right now?';
+
+  return { reply: fallback, success: false, reason: result.reason };
 }
 
 export function clearSenseiHistory(): void {

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, ScrollView, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, ScrollView, TextInput, TouchableOpacity, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -8,6 +8,24 @@ import { KageButton } from '@/components/ui/KageButton';
 import { GlassContainer } from '@/components/ui/GlassContainer';
 import { useColors, spacing } from '@/theme';
 import { getFeed, createPost, likePost, addComment, type Post } from '@/store/socialStore';
+
+// Responsive breakpoints
+const BREAKPOINTS = {
+  mobile: 0,
+  tablet: 768,
+  desktop: 1024,
+  wide: 1440,
+};
+
+function useResponsive() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < BREAKPOINTS.tablet;
+  const isTablet = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
+  const isDesktop = width >= BREAKPOINTS.desktop;
+  const isWide = width >= BREAKPOINTS.wide;
+  
+  return { isMobile, isTablet, isDesktop, isWide, width };
+}
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -24,6 +42,7 @@ type PostType = typeof POST_TYPES[number]['key'];
 
 export default function FeedScreen() {
   const colors = useColors();
+  const { isMobile, isTablet, isDesktop, isWide, width } = useResponsive();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -88,12 +107,19 @@ export default function FeedScreen() {
   return (
     <ScreenContainer>
       <ScrollView
-        contentContainerStyle={{ paddingTop: 50, paddingHorizontal: spacing.lg, paddingBottom: 120 }}
+        contentContainerStyle={{ 
+          paddingTop: isDesktop ? 60 : 50, 
+          paddingHorizontal: isDesktop ? spacing.xl * 2 : spacing.lg, 
+          paddingBottom: 120,
+          maxWidth: isWide ? 1400 : isDesktop ? 1200 : isTablet ? 900 : undefined,
+          alignSelf: isDesktop ? 'center' : undefined,
+          width: '100%'
+        }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <Animated.View entering={FadeInDown.delay(60).duration(500)} style={{ marginBottom: spacing.lg, alignItems: 'center' }}>
-          <KageText variant="caption" letterSpacing={4} color={colors.accent.gold} style={{ fontSize: 8 }}>THE DOJO CHRONICLES</KageText>
+          <KageText variant="caption" letterSpacing={4} color={colors.accent.gold} style={{ fontSize: isDesktop ? 10 : 8 }}>THE DOJO CHRONICLES</KageText>
           <KageText variant="h3" letterSpacing={3}>FEED</KageText>
           <KageText variant="caption" color={colors.text.muted} style={{ marginTop: 4 }}>Share your path. Draw strength from the clan.</KageText>
         </Animated.View>
