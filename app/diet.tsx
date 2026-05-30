@@ -15,6 +15,7 @@ import { InkDivider } from '@/components/japanese/InkDivider';
 import { useColors, spacing } from '@/theme';
 import { generateModelThinkingReport, type ModelThinkingReport } from '@/store/aiStrategist';
 import { ModelThinkingCard } from '@/components/ai/ModelThinkingCard';
+import { getDietRecommendation } from '@/api/services/dietService';
 
 const BREAKPOINTS = { desktop: 1024 };
 function useResponsive() {
@@ -149,7 +150,7 @@ export default function DietPage() {
               onPress={() => router.push('/(tabs)/profile')} 
             />
             <KageButton 
-              title="RUN NEW ANALYSIS" 
+              title="RUN NEW ANALYSIS (via Backend)" 
               variant="primary" 
               size="sm" 
               style={{ flex: 1 }} 

@@ -1,3 +1,8 @@
+/**
+ * @deprecated
+ * This file is legacy. We moved to the new modular AI Strategist (aiStrategist.ts + backend FastAPI).
+ * Will be removed after full migration to FastAPI + Supabase.
+ */
 import { TRAINING_PROGRAMS } from '@/constants/programs';
 import { callSenseiAI } from '@/utils/gemini';
 import { getChronicWeaknesses } from './movementIntelligence';

@@ -10,7 +10,9 @@ import { KageText } from '@/components/ui/KageText';
 import { GlassContainer } from '@/components/ui/GlassContainer';
 import { KageButton } from '@/components/ui/KageButton';
 import { useColors, spacing } from '@/theme';
-import { generateModelThinkingReport, type ModelThinkingReport, type UserProfile } from '@/store/aiStrategist';
+import { runModelThinking } from '@/api/services/aiService';
+import { generateModelThinkingReport as localGenerate } from '@/store/aiStrategist'; // fallback
+import type { ModelThinkingReport, UserProfile } from '@/store/aiStrategist';
 import { getProgramById } from '@/store/programStore';
 import { useRouter } from 'expo-router';
 
@@ -36,8 +38,22 @@ export function ModelThinkingCard() {
     setLoading(true);
     setError('');
     try {
+      if (useProfile) {
+        // Prefer real backend
+        try {
+          const backendReport = await runModelThinking(profile);
+          setReport(backendReport as any);
+          setShowForm(false);
+          setLoading(false);
+          return;
+        } catch (backendError) {
+          console.warn("Backend AI call failed, falling back to local:", backendError);
+        }
+      }
+
+      // Fallback to old local logic
       const dataToSend = useProfile ? profile : undefined;
-      const result = await generateModelThinkingReport(dataToSend);
+      const result = await localGenerate(dataToSend);
       setReport(result);
       setShowForm(false);
     } catch (e) {
