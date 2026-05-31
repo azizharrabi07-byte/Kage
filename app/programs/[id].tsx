@@ -174,6 +174,43 @@ export default function ProgramDetailScreen() {
           </KageText>
         </Animated.View>
 
+        {/* === RICH BENEFITS SECTION (Professional roundtable request) === */}
+        {program.benefits && (
+          <Animated.View entering={FadeInDown.delay(180).duration(600)} style={{ marginBottom: spacing.lg }}>
+            <GlassContainer padding={spacing.lg} style={{ borderRadius: 14 }}>
+              <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 9, letterSpacing: 2, marginBottom: spacing.xs }}>
+                WHAT YOU WILL GAIN
+              </KageText>
+
+              <KageText variant="bodyBold" style={{ fontSize: 13, marginBottom: spacing.sm }}>
+                {program.benefits.whoThisIsFor}
+              </KageText>
+
+              <View style={{ marginBottom: spacing.sm }}>
+                <KageText variant="caption" color={colors.accent.primary} style={{ fontSize: 9, letterSpacing: 1.5, marginBottom: 4 }}>
+                  PHYSICAL TRANSFORMATION
+                </KageText>
+                {program.benefits.physical.map((item: string, i: number) => (
+                  <KageText key={i} variant="body" style={{ fontSize: 11, lineHeight: 16, marginBottom: 3 }}>
+                    • {item}
+                  </KageText>
+                ))}
+              </View>
+
+              <View>
+                <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 9, letterSpacing: 1.5, marginBottom: 4 }}>
+                  MENTAL & CHARACTER GAINS
+                </KageText>
+                {program.benefits.mental.map((item: string, i: number) => (
+                  <KageText key={i} variant="body" style={{ fontSize: 11, lineHeight: 16, marginBottom: 3 }}>
+                    • {item}
+                  </KageText>
+                ))}
+              </View>
+            </GlassContainer>
+          </Animated.View>
+        )}
+
         <InkDivider width={100} thickness="thin" color={colors.accent.gold} />
 
         {program.xpMultiplier !== 1 && (

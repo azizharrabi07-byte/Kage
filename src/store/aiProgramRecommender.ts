@@ -1,5 +1,11 @@
+/**
+ * @deprecated
+ * This file is legacy. We moved to the new modular AI Strategist (aiStrategist.ts + backend FastAPI).
+ * Will be removed after full migration to FastAPI + Supabase.
+ */
 import { TRAINING_PROGRAMS } from '@/constants/programs';
 import { callSenseiAI } from '@/utils/gemini';
+import { getChronicWeaknesses } from './movementIntelligence';
 
 export interface UserPreferences {
   goal: 'strength' | 'muscle' | 'endurance' | 'cardio' | 'custom';
@@ -19,53 +25,62 @@ const programDescriptions = TRAINING_PROGRAMS.map(p =>
 ).join('\n');
 
 function buildPrompt(prefs: UserPreferences): string {
-  return `You are a fitness program recommender. Given a user's preferences and the available programs below, recommend the BEST program.
+  return `You are an expert martial arts and strength coach (Sensei). You must deeply analyze the user and recommend the SINGLE best training program from the list.
 
-USER PREFERENCES:
-- Goal: ${prefs.goal}
-- Experience: ${prefs.experience}
-- Available days/week: ${prefs.daysPerWeek}
-- Preferred training style: ${prefs.style}
-- Equipment available: ${prefs.equipment}
+Think step by step with real intelligence:
+
+1. Understand the user's true goal (strength, muscle, endurance, etc.)
+2. Consider their experience level and what would be sustainable and motivating.
+3. Respect their available training days (don't recommend something too time-consuming).
+4. Match their preferred style and equipment realistically.
+5. Look for synergies — sometimes a "mixed" or slightly different program can be better for long-term growth than a perfect style match.
+6. Prioritize programs that will actually help this specific person progress and stay consistent.
+
+USER PROFILE:
+- Primary Goal: ${prefs.goal}
+- Experience Level: ${prefs.experience}
+- Training Days Available per Week: ${prefs.daysPerWeek}
+- Preferred Training Style: ${prefs.style}
+- Equipment Access: ${prefs.equipment}
 
 AVAILABLE PROGRAMS:
 ${programDescriptions}
 
-Respond with ONLY valid JSON in this exact format:
+Return ONLY valid JSON (no extra text before or after):
 {
-  "programId": "program_id_here",
-  "reasons": ["reason 1", "reason 2", "reason 3"]
+  "programId": "exact_program_id_from_the_list",
+  "reasons": [
+    "Deep, specific reason 1 showing real understanding of this user",
+    "Deep, specific reason 2",
+    "Deep, specific reason 3"
+  ]
 }`;
 }
 
 function fallbackRecommendation(prefs: UserPreferences): Recommendation {
+  // This is only used when the LLM (Groq) is unavailable.
+  // It is intentionally simple — the real intelligence should come from the LLM.
   const programs = TRAINING_PROGRAMS;
 
-  // Score each program
   const scored = programs.map(p => {
     let score = 0;
 
-    // Match goal
     if (prefs.goal === 'strength' && p.style === 'powerlifting') score += 3;
     else if (prefs.goal === 'muscle' && p.style === 'hypertrophy') score += 3;
     else if (prefs.goal === 'cardio' && p.style === 'cardio') score += 3;
     else if (prefs.goal === 'endurance' && (p.style === 'cardio' || p.style === 'calisthenics')) score += 2;
     else if (prefs.goal === 'custom' && p.style === 'mixed') score += 3;
 
-    // Match experience
     if (prefs.experience === 'beginner' && p.difficulty === 'beginner') score += 2;
     else if (prefs.experience === 'intermediate' && p.difficulty === 'intermediate') score += 2;
     else if (prefs.experience === 'advanced' && p.difficulty === 'advanced') score += 2;
 
-    // Match days
     if (p.daysPerWeek <= prefs.daysPerWeek) score += 1;
 
-    // Match equipment
     if (prefs.equipment === 'bodyweight' && p.style === 'calisthenics') score += 2;
     else if (prefs.equipment === 'minimal' && (p.style === 'calisthenics' || p.style === 'mixed')) score += 1;
     else if (prefs.equipment === 'full_gym') score += 1;
 
-    // Match style
     if (prefs.style === p.style) score += 2;
 
     return { program: p, score };
@@ -74,20 +89,29 @@ function fallbackRecommendation(prefs: UserPreferences): Recommendation {
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0].program;
 
-  const reasons: string[] = [];
-  if (best.style === prefs.style) reasons.push(`Matches your preferred ${best.style} training style`);
-  if (best.difficulty === prefs.experience) reasons.push(`Designed for ${best.difficulty} athletes`);
-  if (best.daysPerWeek <= prefs.daysPerWeek) reasons.push(`Fits your schedule (${best.daysPerWeek} days/week)`);
-  reasons.push(`${best.xpMultiplier}x XP multiplier for ${best.style} training`);
+  const reasons: string[] = [
+    `Best available match based on your ${prefs.experience} level and ${prefs.goal} goal`,
+    `Fits within your ${prefs.daysPerWeek} days/week schedule`,
+    `${best.xpMultiplier}x XP multiplier — good progression reward`
+  ];
 
   return { programId: best.id, reasons };
 }
 
 export async function getRecommendedProgram(prefs: UserPreferences): Promise<Recommendation> {
+  // Try the intelligent LLM path first (this is what you wanted)
   try {
-    const prompt = buildPrompt(prefs);
+    const chronicWeaknesses = await getChronicWeaknesses();
+    const basePrompt = buildPrompt(prefs);
+    
+    const weaknessNote = chronicWeaknesses.length > 0 
+      ? `\n\nAthlete's known chronic movement issues (important for program choice): ${chronicWeaknesses.join(', ')}. Prioritize programs that help correct these patterns.`
+      : '';
+
+    const prompt = basePrompt + weaknessNote;
+    
     const result = await callSenseiAI(
-      'You are a fitness recommender. Return ONLY valid JSON.',
+      'You are a wise Sensei who gives thoughtful program recommendations. Always respond with valid JSON only. Consider any chronic movement issues when recommending.',
       prompt,
     );
 
@@ -97,11 +121,17 @@ export async function getRecommendedProgram(prefs: UserPreferences): Promise<Rec
       if (jsonStart >= 0 && jsonEnd > jsonStart) {
         const parsed = JSON.parse(result.slice(jsonStart, jsonEnd + 1));
         if (parsed.programId && TRAINING_PROGRAMS.some(p => p.id === parsed.programId)) {
-          return parsed as Recommendation;
+          return {
+            programId: parsed.programId,
+            reasons: Array.isArray(parsed.reasons) ? parsed.reasons : ["Personalized recommendation from Sensei"]
+          };
         }
       }
     }
-  } catch {}
+  } catch (e) {
+    console.log('LLM recommendation failed, using smart fallback:', e);
+  }
 
+  // Only use the rule-based fallback when the LLM is unreachable or gave bad output
   return fallbackRecommendation(prefs);
 }

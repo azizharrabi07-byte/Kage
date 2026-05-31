@@ -1,4 +1,9 @@
-import { apiGetPRs, apiSavePRs, apiGetExerciseHistory, apiSaveExerciseRecord } from './api';
+import { apiGetPRs, apiSavePRs, apiGetExerciseHistory, apiSaveExerciseRecord } from './api'; // legacy local fallback
+import { workoutsApi } from '../api/apiClient';
+
+function getAuthToken(): string | undefined {
+  return undefined; // will be improved with real auth context
+}
 
 export interface PRRecord {
   maxWeight: number;
@@ -28,6 +33,28 @@ function defaultPR(): PRRecord {
 }
 
 export async function getPRs(): Promise<PRMap> {
+  // Prefer real backend PRs (new /prs endpoint)
+  try {
+    const res: any = await workoutsApi.getPRs(getAuthToken());
+    if (res?.prs && Array.isArray(res.prs)) {
+      const map: PRMap = {};
+      res.prs.forEach((p: any) => {
+        map[p.exercise_name] = {
+          maxWeight: p.best_weight || 0,
+          maxWeightReps: p.best_reps || 0,
+          maxReps: p.best_reps || 0,
+          maxRepsWeight: p.best_weight || 0,
+          totalVolume: p.best_volume || 0,
+          bestSet: p.best_weight ? { weight: p.best_weight, reps: p.best_reps || 1, date: Date.now() } : null,
+          lastUsed: Date.now(),
+        };
+      });
+      return map;
+    }
+  } catch (e) {
+    console.warn('Backend PRs not available, using local');
+  }
+
   return (await apiGetPRs()) || {};
 }
 

@@ -7,6 +7,23 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     kanji: '影力',
     description: '5-week powerlifting — volume, intensity, deload',
     longDescription: 'Modeled after elite powerlifting periodization. Weeks 1-2 accumulate volume for hypertrophy. Weeks 3-4 build intensity for peak strength. Week 5 deloads for supercompensation. 4 days/week of heavy compounds + accessories.',
+    benefits: {
+      whoThisIsFor: "Warriors who want raw strength, better technique under heavy load, and the mental toughness that comes from grinding through real barbell work.",
+      physical: [
+        "Significant increases in squat, bench, and deadlift strength",
+        "Thicker back, legs, and traps from heavy compound volume",
+        "Improved bracing, posture, and core stability under load",
+        "Better tendon and connective tissue resilience",
+        "Clear progressive overload tracking across 5 weeks"
+      ],
+      mental: [
+        "Builds unbreakable confidence from moving heavy weight",
+        "Teaches patience and long-term thinking (deload week)",
+        "Develops the ability to stay calm and tight under pressure",
+        "Creates pride in disciplined, technical lifting",
+        "Prepares the mind for competition or high-stakes training"
+      ]
+    },
     style: 'powerlifting',
     durationWeeks: 5,
     daysPerWeek: 4,
@@ -65,6 +82,23 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     kanji: '鋼体',
     description: '5-week calisthenics — bodyweight mastery',
     longDescription: 'Progressive calisthenics program. Weeks 1-2 build muscular endurance. Weeks 3-4 introduce harder variations. Week 5 skill-focused deload. No equipment required.',
+    benefits: {
+      whoThisIsFor: "Warriors who train with minimal equipment, want functional strength, body control, and the discipline that comes from mastering your own bodyweight.",
+      physical: [
+        "Dramatic improvements in pull-ups, dips, pistol squats, and handstand work",
+        "Stronger joints, shoulders, and connective tissue",
+        "Better muscle endurance and work capacity",
+        "Improved body awareness and movement quality",
+        "Visible muscle definition without heavy weights"
+      ],
+      mental: [
+        "Builds extreme body control and focus",
+        "Teaches patience through slow, technical progressions",
+        "Creates deep pride in owning your own body",
+        "Develops mental toughness through high-rep endurance work",
+        "Gives the satisfaction of achieving impressive skills"
+      ]
+    },
     style: 'calisthenics',
     durationWeeks: 5,
     daysPerWeek: 4,
@@ -122,6 +156,23 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     kanji: '侍筋',
     description: '5-week bodybuilding — volume, intensity, growth',
     longDescription: 'Classic bodybuilding periodization. Weeks 1-3 accumulate volume for muscle protein synthesis. Week 4 spikes intensity. Week 5 deloads for supercompensation. 5 days per week of targeted bro-split training.',
+    benefits: {
+      whoThisIsFor: "Warriors who want to build noticeable muscle size, improve their physique, and enjoy the pump and aesthetic side of training.",
+      physical: [
+        "Clear muscle hypertrophy in chest, back, shoulders, arms and legs",
+        "Improved mind-muscle connection across all major muscle groups",
+        "Better muscle pumps and vascularity",
+        "Stronger isolation work that fixes weak points",
+        "Visible changes in the mirror within 5 weeks"
+      ],
+      mental: [
+        "Builds the satisfaction of seeing your body change",
+        "Teaches the importance of recovery and nutrition alongside training",
+        "Creates a strong sense of ownership over your physique",
+        "Develops consistency through high-volume work",
+        "Gives the confidence that comes from looking stronger"
+      ]
+    },
     style: 'hypertrophy',
     durationWeeks: 5,
     daysPerWeek: 5,
@@ -189,6 +240,23 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     kanji: '風調',
     description: '5-week cardio/mixed — build the engine',
     longDescription: 'Mixed conditioning program: HIIT, strength-endurance, agility, and steady-state. Weeks 1-2 build base. Weeks 3-4 raise intensity. Week 5 tests limits. 4 days/week.',
+    benefits: {
+      whoThisIsFor: "Warriors who feel their conditioning is weak, want better work capacity, and need to build the engine that supports all other training.",
+      physical: [
+        "Dramatically improved conditioning and recovery between sets",
+        "Better fat loss and metabolic health",
+        "Stronger heart and lungs",
+        "Improved ability to handle high-intensity efforts",
+        "More explosive power and speed endurance"
+      ],
+      mental: [
+        "Builds the ability to suffer and keep going",
+        "Teaches mental resilience through brutal conditioning",
+        "Creates confidence in your engine under fatigue",
+        "Develops the 'never quit' mentality",
+        "Makes everything else in training feel easier"
+      ]
+    },
     style: 'cardio',
     durationWeeks: 5,
     daysPerWeek: 4,
@@ -242,6 +310,23 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     kanji: '浪人道',
     description: '5-week custom — your way, your pace',
     longDescription: 'Flexible program for experienced warriors. Choose your exercises each day. App provides structure (sets/reps/rest) based on goal. No locked exercises — full freedom. 5 days/week.',
+    benefits: {
+      whoThisIsFor: "Experienced warriors who know what they need, want full freedom, and like designing their own path while still having smart structure.",
+      physical: [
+        "Complete freedom to target your specific weaknesses",
+        "Ability to train around injuries or equipment limitations",
+        "Perfect for advanced lifters who need customization",
+        "Can combine strength, hypertrophy, and conditioning as needed",
+        "Maximum ownership over your own training"
+      ],
+      mental: [
+        "Builds deep self-awareness about your own training",
+        "Develops the ability to program intelligently for yourself",
+        "Creates strong sense of autonomy and responsibility",
+        "Allows you to train what actually excites you",
+        "Prepares you to eventually coach others"
+      ]
+    },
     style: 'mixed',
     durationWeeks: 5,
     daysPerWeek: 5,

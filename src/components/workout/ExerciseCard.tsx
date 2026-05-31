@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { GlassContainer } from '@/components/ui/GlassContainer';
@@ -10,6 +10,8 @@ import { useColors, spacing } from '@/theme';
 import { categoryInfo } from '@/constants/categories';
 import { EXERCISE_COACHING } from '@/store/senseiEngine';
 import type { Exercise } from '@/store/types';
+import { ExerciseDemoModal } from './ExerciseDemoModal';
+import { getExerciseDemo } from '@/constants/exerciseDemos';
 
 interface ExerciseCardProps {
   exercise: Exercise;
@@ -24,6 +26,7 @@ export function ExerciseCard({ exercise, index, active, completed }: ExerciseCar
   const target = exerciseImgs[exercise.name] || 'full';
   const [showBenefits, setShowBenefits] = useState(false);
   const [showSteps, setShowSteps] = useState(!active);
+  const [showDemo, setShowDemo] = useState(false);
   const cat = categoryInfo[exercise.category];
 
   return (
@@ -51,6 +54,11 @@ export function ExerciseCard({ exercise, index, active, completed }: ExerciseCar
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
               <KageText variant="kanji" style={{ fontSize: 16, color: colors.accent.primary }}>{exercise.kanji}</KageText>
               <KageText variant="bodyBold" style={{ fontSize: 15, color: colors.text.primary }}>{exercise.name}</KageText>
+              {getExerciseDemo(exercise.name) && (
+                <TouchableOpacity onPress={() => setShowDemo(true)} style={{ paddingLeft: 6 }}>
+                  <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 9 }}>▶ DEMO</KageText>
+                </TouchableOpacity>
+              )}
             </View>
             <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 10, marginBottom: 6 }}>{exercise.target}</KageText>
             <View style={{ flexDirection: 'row', gap: 14 }}>
@@ -231,6 +239,14 @@ export function ExerciseCard({ exercise, index, active, completed }: ExerciseCar
           </View>
         )}
       </GlassContainer>
+
+      {/* Exercise Demo Modal */}
+      <ExerciseDemoModal 
+        visible={showDemo} 
+        exerciseName={exercise.name} 
+        source={getExerciseDemo(exercise.name)}
+        onClose={() => setShowDemo(false)} 
+      />
     </Animated.View>
   );
 }

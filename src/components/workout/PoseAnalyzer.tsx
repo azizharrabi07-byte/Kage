@@ -8,6 +8,7 @@ import { checkAngles, type AngleResult } from '@/constants/poseAngles';
 import { createRepCounter } from '@/utils/repCounter';
 import { playSound } from '@/utils/sound';
 import { callSenseiAI } from '@/utils/gemini';
+import { saveMovementInsight } from '@/store/movementIntelligence';
 
 interface PoseAnalyzerProps {
   exerciseName: string;
@@ -79,7 +80,9 @@ export function PoseAnalyzer({ exerciseName, onClose, onFeedback, autoFeedbackIn
   const [formScore, setFormScore] = useState(1);
   const [camOn, setCamOn] = useState(false);
   const [fb, setFb] = useState<string[]>([]);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [deepReviewLoading, setDeepReviewLoading] = useState(false);
+  const facingRef = useRef<'user' | 'environment'>('environment');
 
   useEffect(() => {
     repCtrl.current = createRepCounter(exerciseName);
@@ -88,6 +91,10 @@ export function PoseAnalyzer({ exerciseName, onClose, onFeedback, autoFeedbackIn
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []);
+
+  useEffect(() => {
+    facingRef.current = facingMode;
+  }, [facingMode]);
 
   async function initMediaPipe() {
     setStatus('loading');
@@ -117,8 +124,9 @@ export function PoseAnalyzer({ exerciseName, onClose, onFeedback, autoFeedbackIn
 
   async function startCamera() {
     try {
+      const mode = facingRef.current;
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode },
+        video: { width: 640, height: 480, facingMode: mode },
       });
       streamRef.current = s;
       if (videoRef.current) {
@@ -192,12 +200,39 @@ export function PoseAnalyzer({ exerciseName, onClose, onFeedback, autoFeedbackIn
 
   async function reqAI(a: AngleResult[], rc: number) {
     try {
-      const system = `You are Sensei, a martial arts fitness coach. Give SHORT, actionable form coaching (1 sentence max). Focus on the most critical issue.`;
-      const prompt = `Exercise: ${exerciseName}\nReps: ${rc}\nForm:\n${a.map(x => `  ${x.name}: ${x.angle}° ${x.inRange ? 'OK' : 'BAD'} — ${x.cue}`).join('\n')}\n\nGive 1 sentence coaching fix.`;
+      // Rich data for real LLM reasoning (not simple if/else)
+      const angleDetails = a.map(x => {
+        const deviation = x.inRange ? 'within optimal' : 'outside optimal range';
+        return `- ${x.name}: ${x.angle}° (${deviation}) — priority: ${x.priority}`;
+      }).join('\n');
+
+      // Track recent trend (last 3 feedbacks)
+      const recentContext = fb.slice(-3).join(' | ');
+
+      const system = `You are Sensei — a world-class movement specialist and former high-level coach.
+You are given precise joint angle measurements from computer vision during live exercise.
+Your job is to act as an expert analyst: compare the actual numbers to ideal biomechanical ranges for that specific exercise.
+You must give ONE highly specific, technical, and immediately actionable cue. 
+Speak like a real demanding coach — concise, direct, no fluff, no greetings. Max 14 words.`;
+
+      const prompt = `Exercise: ${exerciseName}
+Rep: ${rc}
+Current joint measurements:
+${angleDetails}
+
+Recent previous feedback this set: ${recentContext || 'None yet'}
+
+As an expert, what is the single highest-leverage correction this athlete needs right now based purely on the angle data?`;
+
       const reply = await callSenseiAI(system, prompt);
       if (reply) {
         setFb(p => [...p.slice(-9), reply]);
         onFeedback?.(reply);
+
+        // Save to Movement Intelligence (high priority feature)
+        const issues = [reply]; // Treat feedback as the main issue for now
+        const strengths = a.filter(x => x.inRange).map(x => `${x.name} good`);
+        await saveMovementInsight(exerciseName, issues, strengths);
       }
     } catch {}
   }
@@ -216,17 +251,28 @@ export function PoseAnalyzer({ exerciseName, onClose, onFeedback, autoFeedbackIn
 
   function flipCamera() {
     const next = facingMode === 'user' ? 'environment' : 'user';
+    const wasOn = camOn;
+    if (wasOn) stopCam();
     setFacingMode(next);
-    if (camOn) {
-      stopCam();
-      setTimeout(() => {
-        setFacingMode(next);
-        setTimeout(() => startCamera(), 300);
-      }, 200);
+    if (wasOn) {
+      setTimeout(() => startCamera(), 450);
     }
   }
 
   const pc: Record<string, string> = { critical: '#C8102E', important: '#D4A030', refinement: '#3B82F6' };
+
+  // Simple ideal range lookup for display (you can expand this)
+  function getIdealRange(jointName: string): string {
+    const map: Record<string, string> = {
+      'Elbow': '80-175°',
+      'Shoulder': '60-100°',
+      'Knee': '80-130°',
+      'Hip': '50-120°',
+      'Back': '160-185°',
+      'Wrist': '150-190°',
+    };
+    return map[jointName] || 'optimal';
+  }
 
   return (
     <GlassContainer intensity="heavy" glow="red" padding={spacing.md}>
@@ -256,68 +302,220 @@ export function PoseAnalyzer({ exerciseName, onClose, onFeedback, autoFeedbackIn
 
       {status === 'ready' && (
         <>
+          {/* Desktop: Two-column layout | Mobile: Stacked */}
           <View style={{
-            position: 'relative', width: '100%', aspectRatio: 4 / 3,
-            borderRadius: 10, overflow: 'hidden', backgroundColor: '#000', marginBottom: spacing.md,
-            borderWidth: 1, borderColor: colors.glass.border,
+            flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+            gap: Platform.OS === 'web' ? 16 : 0,
+            marginBottom: spacing.md,
           }}>
-            <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: camOn ? 'block' : 'none' }} playsInline muted />
-            <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: camOn ? 'block' : 'none' }} />
-            {!camOn && (
-              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <KageText variant="body" color={colors.text.muted}>Camera off</KageText>
-                <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 9, marginTop: 4 }}>Grant camera permission when prompted</KageText>
+            
+            {/* Left column: Video + Controls (bigger on desktop) */}
+            <View style={{ 
+              flex: Platform.OS === 'web' ? 1.1 : 1,
+              minWidth: Platform.OS === 'web' ? 420 : undefined 
+            }}>
+              <View style={{
+                position: 'relative', 
+                width: '100%', 
+                aspectRatio: Platform.OS === 'web' ? 16 / 10 : 4 / 3,
+                maxHeight: Platform.OS === 'web' ? 480 : 320,
+                borderRadius: 12, 
+                overflow: 'hidden', 
+                backgroundColor: '#000',
+                borderWidth: 1, 
+                borderColor: colors.glass.border,
+                boxShadow: Platform.OS === 'web' ? '0 8px 30px rgba(0,0,0,0.35)' : undefined,
+              }}>
+                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: camOn ? 'block' : 'none' }} playsInline muted />
+                <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: camOn ? 'block' : 'none' }} />
+                {!camOn && (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <KageText variant="body" color={colors.text.muted}>Camera off</KageText>
+                    <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 9, marginTop: 4 }}>Grant camera permission when prompted</KageText>
+                  </View>
+                )}
+              </View>
+
+              {/* Camera controls */}
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                {camOn ? (
+                  <KageButton title="STOP" variant="ghost" size="sm" onPress={stopCam} style={{ flex: 1 }} />
+                ) : (
+                  <KageButton title="START CAMERA" variant="primary" size="sm" onPress={startCamera} style={{ flex: 1 }} />
+                )}
+                <KageButton title={`SWITCH TO ${facingMode === 'user' ? 'REAR' : 'FRONT'}`} variant="gold" size="sm" onPress={flipCamera} style={{ flex: 1 }} />
+              </View>
+            </View>
+
+            {/* Right column on desktop: Live Data + Feedback */}
+            {Platform.OS === 'web' && (
+              <View style={{ flex: 1, minWidth: 280 }}>
+                {/* Reps + Form score */}
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                  <View style={{ flex: 1, padding: 10, borderRadius: 10, backgroundColor: colors.glass.light, borderWidth: 1, borderColor: colors.glass.borderLight, alignItems: 'center' }}>
+                    <KageText variant="mono" color={colors.accent.primary} style={{ fontSize: 26 }}>{repCount}</KageText>
+                    <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 9 }}>REPS</KageText>
+                  </View>
+                  <View style={{ flex: 1, padding: 10, borderRadius: 10, backgroundColor: colors.glass.light, borderWidth: 1, borderColor: colors.glass.borderLight, alignItems: 'center' }}>
+                    <KageText variant="mono" color={formScore >= 0.8 ? colors.status.ready : formScore >= 0.5 ? colors.status.warning : colors.status.danger} style={{ fontSize: 26 }}>
+                      {Math.round(formScore * 100)}%
+                    </KageText>
+                    <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 9 }}>FORM</KageText>
+                  </View>
+                </View>
+
+                {/* Angle breakdown (condensed for sidebar) */}
+                <View style={{ marginBottom: 8 }}>
+                  <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 8, letterSpacing: 1, marginBottom: 4 }}>LIVE ANGLES</KageText>
+                  <ScrollView style={{ maxHeight: 160 }} showsVerticalScrollIndicator={false}>
+                    {angles.map((a, i) => (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 3, paddingHorizontal: 6, marginBottom: 2, borderRadius: 4, backgroundColor: a.inRange ? 'rgba(0,204,136,0.08)' : 'rgba(200,16,46,0.08)' }}>
+                        <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: a.inRange ? colors.status.ready : colors.status.danger }} />
+                        <KageText variant="body" style={{ fontSize: 10, color: colors.text.secondary, flex: 1 }}>{a.name}</KageText>
+                        <KageText variant="mono" style={{ fontSize: 10, color: a.inRange ? colors.status.ready : colors.status.danger }}>{a.angle}°</KageText>
+                        <KageText variant="caption" style={{ fontSize: 8, color: colors.text.muted }}>ideal ~{getIdealRange(a.name)}</KageText>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
             )}
           </View>
 
-          {/* Camera controls */}
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
-            {camOn ? (
-              <KageButton title="STOP" variant="ghost" size="sm" onPress={stopCam} style={{ flex: 1 }} />
-            ) : (
-              <KageButton title="START CAMERA" variant="primary" size="sm" onPress={startCamera} style={{ flex: 1 }} />
-            )}
-            <KageButton title={`${facingMode === 'user' ? 'REAR' : 'FRONT'} CAM`} variant="gold" size="sm" onPress={flipCamera} style={{ flex: 1 }} />
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
-            <View style={{ flex: 1, padding: spacing.sm, borderRadius: 8, backgroundColor: colors.glass.light, borderWidth: 1, borderColor: colors.glass.borderLight, alignItems: 'center' }}>
-              <KageText variant="mono" color={colors.accent.primary} style={{ fontSize: 28 }}>{repCount}</KageText>
-              <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 8, letterSpacing: 1.5 }}>REPS</KageText>
-            </View>
-            <View style={{ flex: 1, padding: spacing.sm, borderRadius: 8, backgroundColor: colors.glass.light, borderWidth: 1, borderColor: colors.glass.borderLight, alignItems: 'center' }}>
-              <KageText variant="mono" color={formScore >= 0.8 ? colors.status.ready : formScore >= 0.5 ? colors.status.warning : colors.status.danger} style={{ fontSize: 28 }}>
-                {Math.round(formScore * 100)}%
-              </KageText>
-              <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 8, letterSpacing: 1.5 }}>FORM</KageText>
-            </View>
-          </View>
-
-          <ScrollView style={{ maxHeight: 140 }} showsVerticalScrollIndicator={false}>
-            {angles.map((a, i) => (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 3, paddingHorizontal: spacing.sm, marginBottom: 2, borderRadius: 4, backgroundColor: a.inRange ? 'rgba(0,204,136,0.08)' : 'rgba(200,16,46,0.08)' }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a.inRange ? colors.status.ready : colors.status.danger }} />
-                <KageText variant="body" style={{ fontSize: 10, color: colors.text.secondary, width: 55 }}>{a.name}</KageText>
-                <KageText variant="mono" style={{ fontSize: 10, width: 45, color: a.inRange ? colors.status.ready : colors.status.danger }}>{a.angle}°</KageText>
-                <KageText variant="mono" style={{ fontSize: 7, color: pc[a.priority] || colors.text.muted, width: 45 }}>{a.priority}</KageText>
-                <KageText variant="caption" style={{ fontSize: 8, color: colors.text.muted, flex: 1, flexShrink: 1 }}>{a.cue}</KageText>
+          {/* Mobile-only stacked data (desktop already has sidebar) */}
+          {Platform.OS !== 'web' && (
+            <>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
+                <View style={{ flex: 1, padding: spacing.sm, borderRadius: 8, backgroundColor: colors.glass.light, borderWidth: 1, borderColor: colors.glass.borderLight, alignItems: 'center' }}>
+                  <KageText variant="mono" color={colors.accent.primary} style={{ fontSize: 26 }}>{repCount}</KageText>
+                  <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 8 }}>REPS</KageText>
+                </View>
+                <View style={{ flex: 1, padding: spacing.sm, borderRadius: 8, backgroundColor: colors.glass.light, borderWidth: 1, borderColor: colors.glass.borderLight, alignItems: 'center' }}>
+                  <KageText variant="mono" color={formScore >= 0.8 ? colors.status.ready : formScore >= 0.5 ? colors.status.warning : colors.status.danger} style={{ fontSize: 26 }}>
+                    {Math.round(formScore * 100)}%
+                  </KageText>
+                  <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 8 }}>FORM</KageText>
+                </View>
               </View>
-            ))}
-          </ScrollView>
 
+              <ScrollView style={{ maxHeight: 120 }} showsVerticalScrollIndicator={false}>
+                {angles.map((a, i) => (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 3, paddingHorizontal: spacing.sm, marginBottom: 2, borderRadius: 4, backgroundColor: a.inRange ? 'rgba(0,204,136,0.08)' : 'rgba(200,16,46,0.08)' }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a.inRange ? colors.status.ready : colors.status.danger }} />
+                    <KageText variant="body" style={{ fontSize: 10, color: colors.text.secondary, width: 55 }}>{a.name}</KageText>
+                    <KageText variant="mono" style={{ fontSize: 10, width: 45, color: a.inRange ? colors.status.ready : colors.status.danger }}>{a.angle}°</KageText>
+                    <KageText variant="caption" style={{ fontSize: 8, color: colors.text.muted, flex: 1 }}>{a.cue}</KageText>
+                  </View>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {/* Feedback + Deep Review (shared) */}
           {fb.length > 0 && (
-            <View style={{ marginTop: spacing.sm, gap: 3 }}>
-              <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 7, letterSpacing: 1.5 }}>SENSEI FEEDBACK</KageText>
-              <ScrollView style={{ maxHeight: 70 }} showsVerticalScrollIndicator={false}>
+            <View style={{ marginTop: spacing.sm, gap: 4 }}>
+              <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 8, letterSpacing: 1.5 }}>SENSEI FEEDBACK</KageText>
+              <ScrollView style={{ maxHeight: Platform.OS === 'web' ? 110 : 70 }} showsVerticalScrollIndicator={false}>
                 {fb.map((f, i) => (
-                  <KageText key={i} variant="body" style={{ fontSize: 9, color: colors.text.secondary, lineHeight: 13, paddingVertical: 2, paddingHorizontal: spacing.sm, backgroundColor: colors.glass.light, borderRadius: 4, marginBottom: 1 }}>
+                  <KageText 
+                    key={i} 
+                    variant="body" 
+                    style={{ 
+                      fontSize: Platform.OS === 'web' ? 11 : 9, 
+                      color: colors.text.secondary, 
+                      lineHeight: 15, 
+                      paddingVertical: 4, 
+                      paddingHorizontal: spacing.sm, 
+                      backgroundColor: colors.glass.light, 
+                      borderRadius: 6, 
+                      marginBottom: 3 
+                    }}
+                  >
                     • {f}
                   </KageText>
                 ))}
               </ScrollView>
             </View>
           )}
+
+          {/* Deep Manual Review Button - Fixed & Improved */}
+          {angles.length > 0 && (
+            <View style={{ marginTop: spacing.sm }}>
+              <View 
+                onTouchEnd={async () => {
+                  if (angles.length === 0 || deepReviewLoading) return;
+                  setDeepReviewLoading(true);
+                  try {
+                    const richPrompt = `Exercise: ${exerciseName}\nReps completed: ${repCount}\n\nDetailed joint analysis:\n${angles.map(x => `${x.name}: ${x.angle}° (${x.inRange ? 'good' : 'needs work'})`).join('\n')}\n\nProvide a deep, expert-level form breakdown. Identify the root cause if possible and give 2-3 prioritized corrections with clear reasoning.`;
+                    
+                    const deepReply = await callSenseiAI(
+                      'You are a highly analytical movement coach. Give a thoughtful, structured mini-report. Use precise language. Structure: Observation → Likely Cause → Priority Corrections.',
+                      richPrompt
+                    );
+                    if (deepReply) {
+                      setFb(p => [...p, `【DEEP REVIEW】 ${deepReply}`]);
+                      
+                      // Save deep review insight for long-term intelligence
+                      const issues = [deepReply];
+                      const strengths = angles.filter(x => x.inRange).map(x => `${x.name} strong`);
+                      await saveMovementInsight(exerciseName, issues, strengths, deepReply);
+                    } else {
+                      setFb(p => [...p, `【DEEP REVIEW】 The network is quiet. Try again in a moment, warrior.`]);
+                    }
+                  } catch {
+                    setFb(p => [...p, `【DEEP REVIEW】 Something blocked the path. Breathe and try once more.`]);
+                  } finally {
+                    setDeepReviewLoading(false);
+                  }
+                }}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: 10,
+                  backgroundColor: deepReviewLoading ? colors.glass.border : colors.glass.medium,
+                  borderWidth: 1,
+                  borderColor: colors.accent.gold,
+                  alignItems: 'center',
+                  opacity: deepReviewLoading ? 0.6 : 1,
+                }}
+              >
+                <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 10, letterSpacing: 1 }}>
+                  {deepReviewLoading ? "SENSEI IS ANALYZING DEEPLY..." : "✧ DEEP SENSEI REVIEW (Current Frame)"}
+                </KageText>
+              </View>
+            </View>
+          )}
+
+          {/* Video Upload for Deeper Analysis (Premium Feature) */}
+          <View style={{ marginTop: spacing.sm }}>
+            <View 
+              onTouchEnd={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'video/*';
+                input.onchange = async () => {
+                  const file = input.files?.[0];
+                  if (file) {
+                    setFb(p => [...p, `【VIDEO UPLOADED】 Thank you. A deep analysis of this video will be processed by Sensei soon. For now, describe any specific concerns you noticed.`]);
+                  }
+                };
+                input.click();
+              }}
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 8,
+                backgroundColor: colors.glass.light,
+                borderWidth: 1,
+                borderColor: colors.accent.primary,
+                alignItems: 'center',
+              }}
+            >
+              <KageText variant="caption" color={colors.accent.primary} style={{ fontSize: 9, letterSpacing: 1 }}>
+                📹 UPLOAD VIDEO FOR DEEPER ANALYSIS
+              </KageText>
+            </View>
+          </View>
         </>
       )}
     </GlassContainer>

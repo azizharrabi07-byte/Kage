@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -7,12 +7,14 @@ import { GlassContainer } from '@/components/ui/GlassContainer';
 import { InkDivider } from '@/components/japanese/InkDivider';
 import { useColors, spacing } from '@/theme';
 import { getProgression } from '@/store/progressionStore';
-import { callSenseiAI } from '@/utils/gemini';
+import { callSenseiAI, resetSenseiRateLimit } from '@/utils/gemini';
+import { getChronicWeaknesses } from '@/store/movementIntelligence';
 
 interface ChatMessage {
   role: 'user' | 'model';
   text: string;
   time: number;
+  id: string; // Unique ID for deduplication
 }
 
 const QUICK_ACTIONS = [
@@ -24,7 +26,13 @@ const QUICK_ACTIONS = [
   '🏆 Motivation',
 ];
 
-const SYSTEM_PROMPT = `You are Sensei, a wise and warm martial arts and fitness coach with decades of experience. You speak with discipline but genuine warmth. You use Japanese martial arts concepts naturally (but not excessively). You are CONVERSATIONAL — you chat like a real person. When someone says "hi", you greet them warmly and ask what they want to work on today. You give SHORT, actionable advice (1-3 sentences max). You remember the conversation context. No lectures. No generic platitudes. Be specific and helpful.`;
+const SYSTEM_PROMPT = `You are Sensei, a wise and warm martial arts and fitness coach with decades of experience. You speak with discipline but genuine warmth. You use Japanese martial arts concepts naturally (but not excessively). You are CONVERSATIONAL — you chat like a real person. 
+
+When someone says "hi", you greet them warmly and ask what they want to work on today. 
+
+You give SHORT, actionable advice (1-3 sentences max). You remember the conversation context. No lectures. No generic platitudes. Be specific and helpful.
+
+IMPORTANT: You have long-term memory of this warrior's movement patterns and chronic weaknesses. If relevant, gently reference patterns you've noticed in their training without being repetitive. Offer guidance that helps them overcome recurring issues over time.`;
 
 export default function SenseiCoachScreen() {
   const colors = useColors();
@@ -32,41 +40,100 @@ export default function SenseiCoachScreen() {
     role: 'model',
     text: 'Welcome, warrior. I am Sensei. What troubles your spirit today?',
     time: Date.now(),
+    id: 'welcome-' + Date.now(),
   }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const lastSentMessage = useRef<string>('');
+  const sendTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
-  async function sendMessage(text: string) {
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (sendTimeout.current) {
+        clearTimeout(sendTimeout.current);
+      }
+    };
+  }, []);
+
+  const sendMessage = useCallback(async (text: string, force = false) => {
     if (!text.trim() || loading) return;
-    const userMsg: ChatMessage = { role: 'user', text: text.trim(), time: Date.now() };
+    
+    // Debounce: prevent rapid-fire messages
+    if (sendTimeout.current) {
+      clearTimeout(sendTimeout.current);
+    }
+    
+    // Check for duplicate message (within 2 seconds)
+    const now = Date.now();
+    if (text.trim() === lastSentMessage.current && now - (messages[messages.length - 1]?.time || 0) < 2000) {
+      return; // Skip duplicate message
+    }
+    
+    lastSentMessage.current = text.trim();
+    
+    const userMsg: ChatMessage = { 
+      role: 'user', 
+      text: text.trim(), 
+      time: now,
+      id: 'user-' + now 
+    };
+    
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
     try {
-      // Build conversation history
-      const history = messages.map(m => ({ role: m.role, content: m.text }));
-      const reply = await callSenseiAI(SYSTEM_PROMPT, text.trim(), messages.map(m => ({ role: m.role, content: m.text })));
-      setMessages(prev => [...prev, { role: 'model', text: reply, time: Date.now() }]);
+      // Inject user's chronic movement weaknesses for personalized coaching (high priority)
+      const chronic = await getChronicWeaknesses();
+      const enhancedSystem = chronic.length > 0 
+        ? `${SYSTEM_PROMPT}\n\nIMPORTANT: This warrior has shown these recurring movement issues in past sessions: ${chronic.join(', ')}. Reference these patterns when relevant and coach with long-term awareness.`
+        : SYSTEM_PROMPT;
+
+      if (force) resetSenseiRateLimit();
+      const aiResult = await callSenseiAI(enhancedSystem, text.trim(), force);
+      
+      await new Promise(resolve => setTimeout(resolve, 80));
+      
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: aiResult.reply, 
+        time: Date.now(),
+        id: 'model-' + Date.now() 
+      }]);
     } catch {
       setMessages(prev => [...prev, {
         role: 'model',
         text: 'The path is unclear. Ask again with clearer intent.',
         time: Date.now(),
+        id: 'error-' + Date.now(),
       }]);
     }
+    
     setLoading(false);
-  }
+    
+    // Reset last sent message after delay
+    sendTimeout.current = setTimeout(() => {
+      lastSentMessage.current = '';
+    }, 2000);
+  }, [loading, messages]);
 
   return (
     <ScreenContainer>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={{ paddingTop: 50, paddingHorizontal: spacing.lg, flex: 1 }}>
+        <View style={{ 
+          paddingTop: 50, 
+          paddingHorizontal: spacing.lg, 
+          flex: 1,
+          maxWidth: Platform.OS === 'web' ? 720 : undefined,
+          alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
+          width: '100%'
+        }}>
           {/* Header */}
           <Animated.View entering={FadeInDown.duration(400)} style={{ alignItems: 'center', marginBottom: spacing.sm }}>
             <KageText variant="kanji" style={{ fontSize: 32, color: colors.accent.primary, opacity: 0.2 }}>師</KageText>
@@ -97,8 +164,8 @@ export default function SenseiCoachScreen() {
             contentContainerStyle={{ gap: spacing.xs, paddingBottom: spacing.xs }}
             showsVerticalScrollIndicator={false}
           >
-            {messages.map((msg, i) => (
-              <Animated.View key={i} entering={FadeInUp.duration(300)} style={{
+            {messages.map((msg) => (
+              <Animated.View key={msg.id} entering={FadeInUp.duration(300)} style={{
                 flexDirection: 'row',
                 justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
               }}>
@@ -168,6 +235,22 @@ export default function SenseiCoachScreen() {
               <KageText variant="body" style={{ fontSize: 14, opacity: input.trim() && !loading ? 1 : 0.4 }}>➤</KageText>
             </Pressable>
           </View>
+
+          {/* Professional retry for when Sensei is silent (from roundtable feedback) */}
+          <Pressable 
+            onPress={() => { 
+              if (input.trim()) sendMessage(input, true); 
+              else if (messages.length > 1) {
+                const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                if (lastUser) sendMessage(lastUser.text, true);
+              }
+            }}
+            style={{ alignSelf: 'center', marginBottom: 70 }}
+          >
+            <KageText variant="caption" style={{ color: colors.accent.gold, fontSize: 9, opacity: 0.6 }}>
+              Sensei silent? Tap to force fresh question (uses backup key)
+            </KageText>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>

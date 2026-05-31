@@ -147,6 +147,11 @@ export interface TrainingProgram {
   dayTemplates: ProgramDayTemplate[];
   xpMultiplier: number;
   color: string;
+  benefits?: {
+    whoThisIsFor: string;
+    physical: string[];
+    mental: string[];
+  };
 }
 
 export interface CompletedDay {

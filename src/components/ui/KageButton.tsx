@@ -15,6 +15,7 @@ interface KageButtonProps {
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
   style?: any;
+  disabled?: boolean;
 }
 
 export function KageButton({
@@ -24,6 +25,7 @@ export function KageButton({
   size = 'md',
   fullWidth = false,
   style,
+  disabled = false,
 }: KageButtonProps) {
   const colors = useColors();
   const scale = useSharedValue(1);
@@ -63,11 +65,12 @@ export function KageButton({
   };
 
   return (
-    <Animated.View style={[animStyle, fullWidth && { width: '100%' }]}>
+    <Animated.View style={[animStyle, fullWidth && { width: '100%' }, disabled && { opacity: 0.5 }]}>
       <Pressable
-        onPress={onPress}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
+        onPress={disabled ? undefined : onPress}
+        onPressIn={disabled ? undefined : onPressIn}
+        onPressOut={disabled ? undefined : onPressOut}
+        disabled={disabled}
         style={[styles.base, vStyle, sSize, fullWidth && { width: '100%' }, style]}
       >
         <KageText

@@ -1,0 +1,1 @@
+# Kage FastAPI Backend - Modular Architecture

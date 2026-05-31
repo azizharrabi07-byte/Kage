@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Platform } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -14,6 +14,7 @@ import { PoseAnalyzer } from '@/components/workout/PoseAnalyzer';
 import { SenseiReview } from '@/components/workout/SenseiReview';
 import { RestTimer } from '@/components/workout/Timer';
 import { WorkoutComplete } from '@/components/workout/WorkoutComplete';
+import { CustomPlanCreator } from '@/components/workout/CustomPlanCreator';
 import { GlassContainer } from '@/components/ui/GlassContainer';
 import { Sensei } from '@/components/coach/Sensei';
 import { InkDivider } from '@/components/japanese/InkDivider';
@@ -35,9 +36,28 @@ import {
 } from '@/store/programWorkoutContext';
 import type { WorkoutSession, WorkoutTemplate, WorkoutPhase, WorkoutSet, PlayerProgram } from '@/store/types';
 
+// Responsive breakpoints
+const BREAKPOINTS = {
+  mobile: 0,
+  tablet: 768,
+  desktop: 1024,
+  wide: 1440,
+};
+
+function useResponsive() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < BREAKPOINTS.tablet;
+  const isTablet = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
+  const isDesktop = width >= BREAKPOINTS.desktop;
+  const isWide = width >= BREAKPOINTS.wide;
+  
+  return { isMobile, isTablet, isDesktop, isWide, width };
+}
+
 export default function WorkoutScreen() {
   const router = useRouter();
   const colors = useColors();
+  const { isMobile, isTablet, isDesktop, isWide, width } = useResponsive();
   const [phase, setPhase] = useState<WorkoutPhase>('idle');
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [currentExIndex, setCurrentExIndex] = useState(0);
@@ -45,6 +65,7 @@ export default function WorkoutScreen() {
   const [completedSetId, setCompletedSetId] = useState<string | null>(null);
   const [reviewData, setReviewData] = useState<{ baseXP: number; finalXP: number; mastery: any; message: string } | null>(null);
   const [showComplete, setShowComplete] = useState(false);
+  const [showCustomPlan, setShowCustomPlan] = useState(false);
   const [analyzingEx, setAnalyzingEx] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<WorkoutSession | null>(null);
@@ -279,11 +300,17 @@ export default function WorkoutScreen() {
   if (phase === 'idle') {
     return (
       <ScreenContainer>
-        <ScrollView contentContainerStyle={{ paddingTop: 50, paddingHorizontal: spacing.lg }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ 
+          paddingTop: isDesktop ? 60 : 50, 
+          paddingHorizontal: isDesktop ? spacing.xl * 2 : spacing.lg,
+          maxWidth: isWide ? 1400 : isDesktop ? 1200 : isTablet ? 900 : undefined,
+          alignSelf: isDesktop ? 'center' : undefined,
+          width: '100%'
+        }} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInDown.delay(80).duration(600)} style={{ marginBottom: spacing.md, alignItems: 'center' }}>
-            <KageText variant="kanji" color={colors.accent.gold} style={{ fontSize: 28, letterSpacing: 8, marginBottom: spacing.xs }}>修行計画</KageText>
+            <KageText variant="kanji" color={colors.accent.gold} style={{ fontSize: isDesktop ? 36 : 28, letterSpacing: 8, marginBottom: spacing.xs }}>修行計画</KageText>
             <KageText variant="h3" letterSpacing={4}>TRAIN</KageText>
-            <KageText variant="caption" color={colors.text.muted} letterSpacing={3} style={{ fontSize: 8, textTransform: 'uppercase' }}>Programs & Free Workouts</KageText>
+            <KageText variant="caption" color={colors.text.muted} letterSpacing={3} style={{ fontSize: isDesktop ? 10 : 8, textTransform: 'uppercase' }}>Programs & Free Workouts</KageText>
           </Animated.View>
 
           {/* Active program card */}
@@ -318,78 +345,96 @@ export default function WorkoutScreen() {
 
           {/* Available Programs */}
           <Animated.View entering={FadeInDown.delay(240).duration(600)} style={{ marginBottom: spacing.sm }}>
-            <KageText variant="h2" style={{ fontSize: 16, letterSpacing: 3, marginBottom: spacing.xs }}>Programs</KageText>
-            <KageText variant="caption" color={colors.text.muted} letterSpacing={2} style={{ fontSize: 8, textTransform: 'uppercase' }}>
+            <KageText variant="h2" style={{ fontSize: isDesktop ? 20 : 16, letterSpacing: 3, marginBottom: spacing.xs }}>Programs</KageText>
+            <KageText variant="caption" color={colors.text.muted} letterSpacing={2} style={{ fontSize: isDesktop ? 10 : 8, textTransform: 'uppercase' }}>
               Structured training paths
             </KageText>
           </Animated.View>
 
-          {TRAINING_PROGRAMS.map((program, index) => {
-            const isActive = playerProgram?.programId === program.id;
-            const delay = 320 + index * 80;
-            return (
-              <Animated.View key={program.id} entering={FadeInDown.delay(delay).duration(600)} style={{ marginBottom: spacing.sm }}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    if (isActive) router.push(`/programs/${program.id}`);
-                    else if (!playerProgram?.isActive) handleStartProgram(program.id);
-                  }}
-                  disabled={!!playerProgram?.isActive && !isActive}
-                >
-                  <KageCard padding={spacing.md} style={{ opacity: playerProgram?.isActive && !isActive ? 0.45 : 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginBottom: spacing.xs }}>
-                      <KageText variant="h2" style={{ fontSize: 16 }}>{program.name}</KageText>
-                      <KageText variant="kanji" style={{ fontSize: 12, color: colors.accent.gold, opacity: 0.5 }}>{program.kanji}</KageText>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs }}>
-                      <View style={[styles.badge, { backgroundColor: `${STYLE_COLORS[program.style]}22`, borderColor: STYLE_COLORS[program.style] }]}>
-                        <KageText variant="caption" color={STYLE_COLORS[program.style]} style={{ fontSize: 7, letterSpacing: 1.5, textTransform: 'uppercase' }}>{program.style}</KageText>
+          <View style={{ 
+            flexDirection: isDesktop ? 'row' : 'column', 
+            flexWrap: isDesktop ? 'wrap' : 'nowrap', 
+            gap: isDesktop ? 12 : 0 
+          }}>
+            {TRAINING_PROGRAMS.map((program, index) => {
+              const isActive = playerProgram?.programId === program.id;
+              const delay = 320 + index * 80;
+              return (
+                <Animated.View key={program.id} entering={FadeInDown.delay(delay).duration(600)} style={{ 
+                  marginBottom: spacing.sm,
+                  width: isDesktop ? '48%' : '100%',
+                }}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (isActive) router.push(`/programs/${program.id}`);
+                      else if (!playerProgram?.isActive) handleStartProgram(program.id);
+                    }}
+                    disabled={!!playerProgram?.isActive && !isActive}
+                  >
+                    <KageCard padding={isDesktop ? spacing.lg : spacing.md} style={{ opacity: playerProgram?.isActive && !isActive ? 0.45 : 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginBottom: spacing.xs }}>
+                        <KageText variant="h2" style={{ fontSize: isDesktop ? 20 : 16 }}>{program.name}</KageText>
+                        <KageText variant="kanji" style={{ fontSize: isDesktop ? 16 : 12, color: colors.accent.gold, opacity: 0.5 }}>{program.kanji}</KageText>
                       </View>
-                      <View style={[styles.badge, { backgroundColor: `${DIFFICULTY_COLORS[program.difficulty]}22`, borderColor: DIFFICULTY_COLORS[program.difficulty] }]}>
-                        <KageText variant="caption" color={DIFFICULTY_COLORS[program.difficulty]} style={{ fontSize: 7, letterSpacing: 1.5, textTransform: 'uppercase' }}>{program.difficulty}</KageText>
+                      <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs }}>
+                        <View style={[styles.badge, { backgroundColor: `${STYLE_COLORS[program.style]}22`, borderColor: STYLE_COLORS[program.style] }]}>
+                          <KageText variant="caption" color={STYLE_COLORS[program.style]} style={{ fontSize: isDesktop ? 9 : 7, letterSpacing: 1.5, textTransform: 'uppercase' }}>{program.style}</KageText>
+                        </View>
+                        <View style={[styles.badge, { backgroundColor: `${DIFFICULTY_COLORS[program.difficulty]}22`, borderColor: DIFFICULTY_COLORS[program.difficulty] }]}>
+                          <KageText variant="caption" color={DIFFICULTY_COLORS[program.difficulty]} style={{ fontSize: isDesktop ? 9 : 7, letterSpacing: 1.5, textTransform: 'uppercase' }}>{program.difficulty}</KageText>
+                        </View>
+                        <View style={[styles.badge, { backgroundColor: colors.glass.medium, borderColor: colors.glass.border }]}>
+                          <KageText variant="caption" color={colors.text.secondary} style={{ fontSize: isDesktop ? 9 : 7, letterSpacing: 1.5, textTransform: 'uppercase' }}>{program.daysPerWeek}/wk</KageText>
+                        </View>
                       </View>
-                      <View style={[styles.badge, { backgroundColor: colors.glass.medium, borderColor: colors.glass.border }]}>
-                        <KageText variant="caption" color={colors.text.secondary} style={{ fontSize: 7, letterSpacing: 1.5, textTransform: 'uppercase' }}>{program.daysPerWeek}/wk</KageText>
-                      </View>
-                    </View>
-                    <KageText variant="body" color={colors.text.secondary} style={{ fontSize: 11, lineHeight: 16 }}>{program.description}</KageText>
-                  </KageCard>
-                </TouchableOpacity>
-              </Animated.View>
-            );
-          })}
+                      <KageText variant="body" color={colors.text.secondary} style={{ fontSize: isDesktop ? 13 : 11, lineHeight: 16 }}>{program.description}</KageText>
+                    </KageCard>
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+          </View>
 
           <InkDivider width={80} thickness="thin" color={colors.glass.border} />
 
           {/* Free Workouts */}
           <Animated.View entering={FadeInDown.delay(560).duration(600)} style={{ marginVertical: spacing.md }}>
-            <KageText variant="h2" style={{ fontSize: 16, letterSpacing: 3, marginBottom: spacing.xs }}>Free Workouts</KageText>
-            <KageText variant="caption" color={colors.text.muted} letterSpacing={2} style={{ fontSize: 8, textTransform: 'uppercase' }}>
+            <KageText variant="h2" style={{ fontSize: isDesktop ? 20 : 16, letterSpacing: 3, marginBottom: spacing.xs }}>Free Workouts</KageText>
+            <KageText variant="caption" color={colors.text.muted} letterSpacing={2} style={{ fontSize: isDesktop ? 10 : 8, textTransform: 'uppercase' }}>
               Quick-start training sessions
             </KageText>
           </Animated.View>
 
-          {workoutTemplates.map((t, i) => (
-            <Animated.View key={t.id} entering={FadeInDown.delay(600 + i * 100).duration(500)} style={{ marginBottom: 10 }}>
-              <GlassContainer accentTop accentColor={colors.accent.primary} padding={spacing.md} style={{ borderRadius: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.glass.medium, borderWidth: 1, borderColor: colors.glass.border, alignItems: 'center', justifyContent: 'center' }}>
-                    <KageText variant="kanji" style={{ fontSize: 15, color: colors.accent.primary }}>{t.kanji}</KageText>
+          <View style={{ 
+            flexDirection: isDesktop ? 'row' : 'column', 
+            flexWrap: isDesktop ? 'wrap' : 'nowrap', 
+            gap: isDesktop ? 12 : 0 
+          }}>
+            {workoutTemplates.map((t, i) => (
+              <Animated.View key={t.id} entering={FadeInDown.delay(600 + i * 100).duration(500)} style={{ 
+                marginBottom: 10,
+                width: isDesktop ? '48%' : '100%',
+              }}>
+                <GlassContainer accentTop accentColor={colors.accent.primary} padding={isDesktop ? spacing.lg : spacing.md} style={{ borderRadius: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <View style={{ width: isDesktop ? 44 : 36, height: isDesktop ? 44 : 36, borderRadius: 10, backgroundColor: colors.glass.medium, borderWidth: 1, borderColor: colors.glass.border, alignItems: 'center', justifyContent: 'center' }}>
+                      <KageText variant="kanji" style={{ fontSize: isDesktop ? 18 : 15, color: colors.accent.primary }}>{t.kanji}</KageText>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <KageText variant="bodyBold" style={{ fontSize: isDesktop ? 16 : 13, color: colors.text.primary }}>{t.name}</KageText>
+                      <KageText variant="caption" style={{ fontSize: isDesktop ? 11 : 9, color: colors.text.muted }}>{t.description}</KageText>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <KageText variant="bodyBold" style={{ fontSize: 13, color: colors.text.primary }}>{t.name}</KageText>
-                    <KageText variant="caption" style={{ fontSize: 9, color: colors.text.muted }}>{t.description}</KageText>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <KageText variant="caption" style={{ fontSize: isDesktop ? 10 : 8, letterSpacing: 1, color: colors.text.muted }}>{t.exercises.length} exercises · {t.duration}min</KageText>
+                    <KageText variant="caption" color={t.difficulty === 'warrior' ? colors.accent.primary : colors.text.secondary} style={{ fontSize: isDesktop ? 10 : 8, letterSpacing: 1 }}>{t.difficulty.toUpperCase()}</KageText>
                   </View>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <KageText variant="caption" style={{ fontSize: 8, letterSpacing: 1, color: colors.text.muted }}>{t.exercises.length} exercises · {t.duration}min</KageText>
-                  <KageText variant="caption" color={t.difficulty === 'warrior' ? colors.accent.primary : colors.text.secondary} style={{ fontSize: 8, letterSpacing: 1 }}>{t.difficulty.toUpperCase()}</KageText>
-                </View>
-                <KageButton title="BEGIN" variant="primary" size="sm" onPress={() => startWorkout(t)} style={{ alignSelf: 'stretch' }} />
-              </GlassContainer>
-            </Animated.View>
-          ))}
+                  <KageButton title="BEGIN" variant="primary" size={isDesktop ? 'md' : 'sm'} onPress={() => startWorkout(t)} style={{ alignSelf: 'stretch' }} />
+                </GlassContainer>
+              </Animated.View>
+            ))}
+          </View>
           <View style={{ height: 100 }} />
         </ScrollView>
       </ScreenContainer>
@@ -506,7 +551,7 @@ export default function WorkoutScreen() {
                   <View style={{ alignItems: 'center', gap: 2 }}>
                     <KageText variant="tactical" color={colors.status.danger} style={{ fontSize: 6 }}>HEART RATE</KageText>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 1 }}>
-                      <KageText variant="aggressive" color={colors.status.danger} style={{ fontSize: 20, lineHeight: 22 }}>{Math.floor(120 + Math.random() * 30)}</KageText>
+                      <KageText variant="aggressive" color={colors.status.danger} style={{ fontSize: 20, lineHeight: 22 }}>{128}</KageText>
                       <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 8 }}>bpm</KageText>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 2, marginTop: 2 }}>
@@ -519,7 +564,7 @@ export default function WorkoutScreen() {
                 <GlassContainer padding={spacing.sm} glow="cyan" accentTop={false} style={{ borderRadius: 10, flex: 1 }}>
                   <View style={{ alignItems: 'center', gap: 2 }}>
                     <KageText variant="tactical" color={colors.accent.cyan} style={{ fontSize: 6 }}>RANK</KageText>
-                    <KageText variant="aggressive" color={colors.accent.cyan} style={{ fontSize: 20, lineHeight: 22 }}>#{Math.floor(Math.random() * 50) + 1}</KageText>
+                    <KageText variant="aggressive" color={colors.accent.cyan} style={{ fontSize: 20, lineHeight: 22 }}>#27</KageText>
                     <KageText variant="caption" color={colors.text.muted} style={{ fontSize: 7 }}>leaderboard</KageText>
                   </View>
                 </GlassContainer>
@@ -604,4 +649,14 @@ const styles = StyleSheet.create({
   progressBarContainer: { height: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: spacing.sm },
   progressBarFill: { height: '100%', borderRadius: 2 },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  desktopContainer: {
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  desktopGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
 });

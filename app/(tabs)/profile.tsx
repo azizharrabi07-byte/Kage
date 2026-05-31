@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, ScrollView, TextInput, Animated as RNAnimated, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, ScrollView, TextInput, Animated as RNAnimated, LayoutAnimation, Platform, UIManager, useWindowDimensions, TouchableOpacity } from 'react-native';
 import AnimatedView, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -8,14 +8,36 @@ import { KageButton } from '@/components/ui/KageButton';
 import { GlassContainer } from '@/components/ui/GlassContainer';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { MealLogger } from '@/components/nutrition/MealLogger';
+import { KageLineChart, KageBarChart, KageRadarChart } from '@/components/charts';
+import { CalendarHeatmap } from '@/components/recovery/CalendarHeatmap';
 import { useColors, useTheme, spacing } from '@/theme';
+import { useAuth } from '@/auth/AuthContext';
 import { getProgression } from '@/store/progressionStore';
-import { getWorkoutHistory } from '@/store/workoutStore';
+import { getWorkoutHistory, getWeeklyVolumeData, getStrengthProgressData } from '@/store/workoutStore';
 import { getFeed, likePost, addComment, type Post } from '@/store/socialStore';
 import { getDayTotals, type DayTotals } from '@/store/nutritionStore';
+import { getPRs, getExerciseHistory, type PRRecord } from '@/store/prStore';
 import { calculateMacros } from '@/constants/nutritionGoals';
 import type { PlayerProgression } from '@/components/progression/types';
 import type { WorkoutSession } from '@/store/types';
+
+// Responsive breakpoints
+const BREAKPOINTS = {
+  mobile: 0,
+  tablet: 768,
+  desktop: 1024,
+  wide: 1440,
+};
+
+function useResponsive() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < BREAKPOINTS.tablet;
+  const isTablet = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.desktop;
+  const isDesktop = width >= BREAKPOINTS.desktop;
+  const isWide = width >= BREAKPOINTS.wide;
+  
+  return { isMobile, isTablet, isDesktop, isWide, width };
+}
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -62,14 +84,32 @@ function ExpandableSection({ title, icon, children, defaultOpen = false }: Expan
 }
 
 export default function ProfileScreen() {
-  const colors = useColors();
+  const rawColors = useColors();
+  const colors = rawColors || {
+    accent: { primary: '#00F5D4', neon: '#00F5D4', gold: '#FFD700' },
+    text: { primary: '#FFFFFF', muted: '#AAAAAA', secondary: '#CCCCCC' },
+    glass: { border: '#333333', medium: '#1A1A1A', light: '#222222' },
+    background: { primary: '#0A0A0A' },
+    status: { ready: '#00FF88', recovery: '#FFAA00' }
+  };
   const { mode, toggleTheme } = useTheme();
   const router = useRouter();
+  const { isMobile, isTablet, isDesktop, isWide, width } = useResponsive();
+  const { signIn, user } = useAuth();
   const [prog, setProg] = useState<PlayerProgression | null>(null);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [nutritionTotals, setNutritionTotals] = useState<DayTotals | null>(null);
+  const [volumeData, setVolumeData] = useState<any[]>([]);
+  const [strengthData, setStrengthData] = useState<any[]>([]);
+  const [prs, setPrs] = useState<Record<string, PRRecord>>({});
+  const [selectedExercise, setSelectedExercise] = useState<string>('');
+  const [exerciseHistory, setExerciseHistory] = useState<any[]>([]);
   const [showMealLogger, setShowMealLogger] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
 
@@ -81,6 +121,27 @@ export default function ProfileScreen() {
     setPosts(await getFeed());
     const today = new Date().toISOString().slice(0, 10);
     setNutritionTotals(await getDayTotals(today));
+
+    // Load chart data
+    const [vol, str, prData] = await Promise.all([
+      getWeeklyVolumeData(),
+      getStrengthProgressData(),
+      getPRs()
+    ]);
+    setVolumeData(vol);
+    setStrengthData(str);
+    setPrs(prData || {});
+
+    // Auto-select first exercise with data for PR history
+    const firstExercise = Object.keys(prData || {})[0];
+    if (firstExercise) {
+      setSelectedExercise(firstExercise);
+      const hist = await getExerciseHistory(firstExercise);
+      setExerciseHistory(hist.slice(0, 8).map((h: any, i: number) => ({
+        label: `S${i+1}`,
+        value: h.weight || 0
+      })));
+    }
   }
 
   const stats = [
@@ -131,10 +192,16 @@ export default function ProfileScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ paddingTop: 50, paddingHorizontal: spacing.lg }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ 
+        paddingTop: isDesktop ? 60 : 50, 
+        paddingHorizontal: isDesktop ? spacing.xl * 2 : spacing.lg,
+        maxWidth: isWide ? 1400 : isDesktop ? 1200 : isTablet ? 900 : undefined,
+        alignSelf: isDesktop ? 'center' : undefined,
+        width: '100%'
+      }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <AnimatedView.View entering={FadeInDown.delay(80).duration(600)} style={{ marginBottom: 16, alignItems: 'center' }}>
-          <KageText variant="caption" letterSpacing={3} color={colors.accent.gold} style={{ fontSize: 8, textTransform: 'uppercase', marginBottom: 4 }}>
+          <KageText variant="caption" letterSpacing={3} color={colors.accent.gold} style={{ fontSize: isDesktop ? 10 : 8, textTransform: 'uppercase', marginBottom: 4 }}>
             The story of a warrior
           </KageText>
           <KageText variant="h3" letterSpacing={4}>SOUL</KageText>
@@ -163,20 +230,153 @@ export default function ProfileScreen() {
           </GlassContainer>
         </AnimatedView.View>
 
+        {/* Auth Polish - Simple Login */}
+        <AnimatedView.View entering={FadeInDown.delay(220).duration(600)} style={{ marginBottom: 16 }}>
+          <GlassContainer padding={spacing.lg} style={{ borderRadius: 14, borderColor: colors.accent.gold, borderWidth: 1 }}>
+            <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 9, letterSpacing: 2 }}>AUTH STATUS</KageText>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <KageText variant="bodyBold">{isAuthenticated ? '✅ Authenticated (real token mode)' : 'Dev mode (bypass active)'}</KageText>
+              <KageButton 
+                title={isAuthenticated ? "LOGOUT" : "LOGIN (SIMULATED)"} 
+                variant={isAuthenticated ? "ghost" : "gold"} 
+                size="sm" 
+                onPress={() => {
+                  if (isAuthenticated) {
+                    setIsAuthenticated(false);
+                  } else {
+                    setShowLogin(true);
+                  }
+                }} 
+              />
+            </View>
+          </GlassContainer>
+        </AnimatedView.View>
+
+        {/* Simple Login Modal */}
+        <Modal visible={showLogin} transparent animationType="fade" onRequestClose={() => setShowLogin(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 }}>
+            <GlassContainer padding={spacing.xl} style={{ borderRadius: 16 }}>
+              <KageText variant="h3" style={{ marginBottom: 16, textAlign: 'center' }}>Sign In (Dev)</KageText>
+              <TextInput
+                placeholder="email@example.com"
+                value={loginEmail}
+                onChangeText={setLoginEmail}
+                style={{ backgroundColor: colors.glass.light, color: colors.text.primary, padding: 12, borderRadius: 8, marginBottom: 12 }}
+                placeholderTextColor={colors.text.muted}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              <TextInput
+                placeholder="Password"
+                value={loginPassword}
+                onChangeText={setLoginPassword}
+                secureTextEntry
+                style={{ backgroundColor: colors.glass.light, color: colors.text.primary, padding: 12, borderRadius: 8, marginBottom: 12 }}
+                placeholderTextColor={colors.text.muted}
+              />
+              <KageButton 
+                title="SIGN IN WITH SUPABASE" 
+                variant="primary" 
+                onPress={async () => {
+                  if (!loginEmail) {
+                    alert('Please enter email');
+                    return;
+                  }
+                  // TODO: Replace with proper password input field in production
+                  try {
+                    await signIn(loginEmail, loginPassword);
+                    setShowLogin(false);
+                    setLoginPassword('');
+                  } catch (e: any) {
+                    alert(e.message || 'Login failed');
+                  }
+                }} 
+              />
+              <KageButton title="CANCEL" variant="ghost" style={{ marginTop: 8 }} onPress={() => setShowLogin(false)} />
+              <KageText variant="caption" color={colors.text.muted} style={{ textAlign: 'center', marginTop: 12, fontSize: 10 }}>
+                For full Supabase auth: install @supabase/supabase-js on frontend and call signInWithPassword.
+              </KageText>
+              <KageText variant="caption" color={colors.text.muted} style={{ textAlign: 'center', marginTop: 4, fontSize: 9 }}>
+                (Current: Dev bypass. Paste a real JWT below to test /prs etc.)
+              </KageText>
+            </GlassContainer>
+          </View>
+        </Modal>
+
         {/* Journey Stats */}
         <AnimatedView.View entering={FadeInDown.delay(240).duration(600)} style={{ marginBottom: 16 }}>
-          <GlassContainer accentTop accentColor={colors.accent.gold} padding={spacing.lg} style={{ borderRadius: 14 }}>
-            <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: 7.5, textTransform: 'uppercase', marginBottom: 12 }}>
+          <GlassContainer accentTop accentColor={colors.accent.gold} padding={isDesktop ? spacing.xl : spacing.lg} style={{ borderRadius: 14 }}>
+            <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: isDesktop ? 9 : 7.5, textTransform: 'uppercase', marginBottom: 12 }}>
               Journey Stats
             </KageText>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <View style={{ 
+              flexDirection: 'row', 
+              flexWrap: 'wrap', 
+              gap: isDesktop ? 12 : 8,
+              justifyContent: isDesktop ? 'center' : 'flex-start',
+            }}>
               {stats.map((s, i) => (
-                <View key={i} style={{ width: '30%', alignItems: 'center', gap: 4, paddingVertical: 8 }}>
-                  <KageText variant="mono" color={s.color} style={{ fontSize: 18 }}>{s.value}</KageText>
-                  <KageText variant="caption" style={{ fontSize: 7.5, letterSpacing: 1, color: colors.text.muted, textTransform: 'uppercase' }}>{s.label}</KageText>
+                <View key={i} style={{ 
+                  width: isDesktop ? '14%' : '30%', 
+                  minWidth: isDesktop ? 86 : undefined,
+                  alignItems: 'center', 
+                  gap: 4, 
+                  paddingVertical: isDesktop ? 12 : 8 
+                }}>
+                  <KageText variant="mono" color={s.color} style={{ fontSize: isDesktop ? 24 : 18 }}>{s.value}</KageText>
+                  <KageText variant="caption" style={{ fontSize: isDesktop ? 9 : 7.5, letterSpacing: 1, color: colors.text.muted, textTransform: 'uppercase' }}>{s.label}</KageText>
                 </View>
               ))}
             </View>
+          </GlassContainer>
+        </AnimatedView.View>
+
+        {/* Per-Exercise PR History with Selector (Chart Polish) */}
+        <AnimatedView.View entering={FadeInDown.delay(260).duration(600)} style={{ marginBottom: 16 }}>
+          <GlassContainer padding={spacing.lg} style={{ borderRadius: 14 }}>
+            <KageText variant="h3" style={{ marginBottom: 8 }}>PR History by Exercise</KageText>
+            
+            {/* Per-exercise selector (polished dropdown-style) */}
+            <View style={{ marginBottom: 8 }}>
+              <KageText variant="caption" color={colors.text.muted} style={{ marginBottom: 4 }}>
+                Select exercise for history:
+              </KageText>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {Object.keys(prs).slice(0, 6).map((ex) => (
+                  <TouchableOpacity
+                    key={ex}
+                    onPress={async () => {
+                      setSelectedExercise(ex);
+                      const hist = await getExerciseHistory(ex);
+                      setExerciseHistory(hist.slice(0, 10).map((h: any, i: number) => ({
+                        label: `S${i+1}`,
+                        value: h.weight || 0
+                      })));
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor: selectedExercise === ex ? colors.accent.neon : colors.glass.medium,
+                      borderWidth: 1,
+                      borderColor: selectedExercise === ex ? colors.accent.neon : colors.glass.border
+                    }}
+                  >
+                    <KageText variant="caption" style={{ fontSize: 11, color: selectedExercise === ex ? colors.background.primary : colors.text.primary }}>
+                      {ex.length > 16 ? ex.slice(0, 16) + '...' : ex}
+                    </KageText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <KageLineChart
+              title={selectedExercise ? `${selectedExercise} History` : "Select exercise above"}
+              data={exerciseHistory.length > 0 ? exerciseHistory : [{label: 'S1', value: 0}]}
+              yAxisLabel="Weight (kg)"
+              height={130}
+              compact
+            />
           </GlassContainer>
         </AnimatedView.View>
 
@@ -247,13 +447,40 @@ export default function ProfileScreen() {
           </ExpandableSection>
         </AnimatedView.View>
 
-        {/* Expandable: Feed */}
-        <ExpandableSection title="Social Feed" icon="💬">
+        {/* Premium Movement Intelligence - High Impact Feature */}
+        <AnimatedView.View entering={FadeInDown.delay(380).duration(600)} style={{ marginBottom: 16 }}>
+          <GlassContainer accentTop accentColor={colors.accent.gold} padding={spacing.lg} style={{ borderRadius: 14 }}>
+            <KageText variant="caption" letterSpacing={2} color={colors.accent.gold} style={{ fontSize: 8, textTransform: 'uppercase', marginBottom: 8 }}>
+              LONG-TERM INTELLIGENCE
+            </KageText>
+            <KageText variant="bodyBold" style={{ fontSize: 16, marginBottom: 4 }}>Movement Report</KageText>
+            <KageText variant="caption" color={colors.text.muted} style={{ marginBottom: 12 }}>
+              Sensei analyzes your form patterns across sessions and gives you a premium coaching report.
+            </KageText>
+            <KageButton 
+              title="VIEW MY MOVEMENT REPORT" 
+              variant="gold" 
+              size="md" 
+              fullWidth 
+              onPress={() => router.push('/movement-report')} 
+            />
+          </GlassContainer>
+        </AnimatedView.View>
+
+        {/* Expandable: Recent Activity (see full Feed tab for posting) */}
+        <ExpandableSection title="Recent Feats" icon="📜">
           <View style={{ gap: spacing.sm }}>
             {posts.length === 0 ? (
-              <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11 }}>No posts yet — complete a workout to share!</KageText>
+              <View>
+                <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11, marginBottom: 8 }}>
+                  Your clan has not heard your voice yet.
+                </KageText>
+                <KageText variant="caption" color={colors.accent.gold} style={{ fontSize: 10 }}>
+                  Go to the FEED tab and share your first victory, question, or fire.
+                </KageText>
+              </View>
             ) : (
-              posts.slice(0, 10).map(post => (
+              posts.slice(0, 5).map(post => (
                 <GlassContainer key={post.id} intensity="light" padding={spacing.md} glow="subtle">
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
                     <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.glass.medium, alignItems: 'center', justifyContent: 'center' }}>
@@ -329,6 +556,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: spacing.sm }}>
                   <KageButton title="📷 LOG MEAL" variant="gold" size="sm" onPress={() => setShowMealLogger(true)} style={{ flex: 1 }} />
+              <KageButton title="OPEN FULL DIET" variant="ghost" size="sm" onPress={() => router.push('/diet')} style={{ flex: 1 }} />
                 </View>
                 {nutritionTotals.entries.length > 0 && (
                   <View style={{ gap: 4, marginTop: spacing.sm }}>
@@ -349,7 +577,12 @@ export default function ProfileScreen() {
               </>
             )}
             {!nutritionTotals && (
-              <KageButton title="📷 LOG FIRST MEAL" variant="gold" size="sm" onPress={() => setShowMealLogger(true)} />
+              <View>
+                <KageText variant="body" color={colors.text.muted} style={{ fontSize: 11, marginBottom: 8 }}>
+                  No meals logged today. Tracking your fuel is how you become unstoppable.
+                </KageText>
+                <KageButton title="📷 LOG FIRST MEAL" variant="gold" size="sm" onPress={() => setShowMealLogger(true)} />
+              </View>
             )}
           </View>
         </ExpandableSection>
