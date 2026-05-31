@@ -9,6 +9,8 @@ import { KageText } from '@/components/ui/KageText';
 import { KageButton } from '@/components/ui/KageButton';
 import { useColors, spacing } from '@/theme';
 import { SenseiDebrief } from './SenseiDebrief';
+import { KageRadarChart } from '@/components/charts';
+import { CalendarHeatmap } from '@/components/recovery/CalendarHeatmap';
 
 interface WorkoutCompleteProps {
   xp: number;
@@ -19,7 +21,13 @@ interface WorkoutCompleteProps {
 }
 
 export function WorkoutComplete({ xp, duration, setsCompleted, onFinish, onGoHome }: WorkoutCompleteProps) {
-  const colors = useColors();
+  const rawColors = useColors();
+  const colors = rawColors || {
+    accent: { primary: '#00F5D4', neon: '#00F5D4', gold: '#FFD700' },
+    text: { primary: '#FFFFFF', muted: '#AAAAAA' },
+    glass: { border: '#333333' },
+    background: { primary: '#0A0A0A' }
+  };
   const scale = useSharedValue(0);
   const glow = useSharedValue(0);
   const [showDebrief, setShowDebrief] = useState(false);
@@ -68,6 +76,39 @@ export function WorkoutComplete({ xp, duration, setsCompleted, onFinish, onGoHom
           </GlassContainer>
         </Animated.View>
 
+        {/* Post-Workout Visual Feedback: Radar + Consistency */}
+        <Animated.View entering={FadeInDown.delay(450).duration(600)} style={{ width: '100%' }}>
+          <GlassContainer padding={spacing.lg} style={{ borderRadius: 14, marginBottom: 12 }}>
+            <KageText variant="caption" color={colors.accent.gold} style={{ textAlign: 'center', fontSize: 9, letterSpacing: 2, marginBottom: 8 }}>
+              SESSION IMPACT
+            </KageText>
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
+              <View>
+                <KageRadarChart
+                  title="Attribute Boost"
+                  data={[
+                    { label: 'Str', value: Math.min(100, 40 + (xp / 10)) },
+                    { label: 'End', value: Math.min(100, 35 + (xp / 12)) },
+                    { label: 'Foc', value: Math.min(100, 50 + (setsCompleted * 2)) },
+                    { label: 'Dis', value: Math.min(100, 45 + (duration / 120)) },
+                    { label: 'Rec', value: 60 },
+                    { label: 'Spi', value: 55 },
+                  ]}
+                  size={120}
+                />
+              </View>
+              
+              <View style={{ width: 140 }}>
+                <CalendarHeatmap 
+                  showStreak 
+                  title="Streak" 
+                />
+              </View>
+            </View>
+          </GlassContainer>
+        </Animated.View>
+
         <Animated.View entering={FadeInDown.delay(600).duration(600)} style={{ width: '100%', gap: 8 }}>
           <KageButton title="CONTINUE JOURNEY" variant="primary" size="lg" fullWidth onPress={onFinish} />
           
@@ -98,6 +139,9 @@ export function WorkoutComplete({ xp, duration, setsCompleted, onFinish, onGoHom
           />
         </View>
       </Modal>
+
+      {/* Note for developers: Real persistence (workout + PRs) now routes through
+          workoutStore.saveWorkoutSession() → new backend /workouts when possible */}
     </View>
   );
 }

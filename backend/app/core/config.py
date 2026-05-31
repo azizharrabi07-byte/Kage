@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
 
+    # Computed property for Supabase JWKS (used for real JWT validation)
+    @property
+    def SUPABASE_JWKS_URL(self) -> str:
+        # Supabase exposes JWKS at /auth/v1/.well-known/jwks.json
+        return f"{self.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

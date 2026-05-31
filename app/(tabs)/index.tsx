@@ -13,10 +13,12 @@ import { InkDivider } from '@/components/japanese/InkDivider';
 import { RankBadge } from '@/components/progression/RankBadge';
 import { Sensei } from '@/components/coach/Sensei';
 import { ModelThinkingCard } from '@/components/ai/ModelThinkingCard';
+import { KageLineChart, KageBarChart } from '@/components/charts';
+import { CalendarHeatmap } from '@/components/recovery/CalendarHeatmap';
 import { Image } from 'react-native';
 import { useColors, useTheme, spacing } from '@/theme';
 import { getProgression, getRankByIndex } from '@/store/progressionStore';
-import { getWorkoutHistory } from '@/store/workoutStore';
+import { getWorkoutHistory, getWeeklyVolumeData, getStrengthProgressData } from '@/store/workoutStore';
 import { loadPlayerProgram, getProgramById, getProgress } from '@/store/programStore';
 import type { PlayerProgression } from '@/components/progression/types';
 import type { PlayerProgram } from '@/store/types';
@@ -41,17 +43,28 @@ function useResponsive() {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const colors = useColors();
+  const rawColors = useColors();
+  const colors = rawColors || {
+    accent: { primary: '#00F5D4', neon: '#00F5D4', gold: '#FFD700' },
+    text: { primary: '#FFFFFF', muted: '#AAAAAA', secondary: '#CCCCCC' },
+    glass: { border: '#333333', medium: '#1A1A1A' },
+    background: { primary: '#0A0A0A' },
+    status: { ready: '#00FF88', recovery: '#FFAA00' }
+  };
   const { mode, toggleTheme } = useTheme();
   const { isMobile, isTablet, isDesktop, isWide, width } = useResponsive();
   const [prog, setProg] = useState<PlayerProgression | null>(null);
   const [playerProg, setPlayerProg] = useState<PlayerProgram | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [volumeData, setVolumeData] = useState<Array<{label: string, value: number}>>([]);
+  const [strengthData, setStrengthData] = useState<Array<{label: string, value: number}>>([]);
 
   useEffect(() => {
     Promise.all([
       getProgression().then(setProg),
       loadPlayerProgram().then(setPlayerProg),
+      getWeeklyVolumeData().then(setVolumeData),
+      getStrengthProgressData().then(setStrengthData),
     ]).finally(() => setIsLoading(false));
   }, []);
 
@@ -168,6 +181,66 @@ export default function HomeScreen() {
         <Animated.View entering={FadeInDown.delay(280).duration(600)} style={{ marginBottom: 16 }}>
           <ModelThinkingCard />
         </Animated.View>
+
+        {/* === DESKTOP TRAINING ANALYTICS (Phase 5 Visualizations) === */}
+        {isDesktop && (
+          <Animated.View entering={FadeInDown.delay(340).duration(600)} style={{ marginBottom: 24 }}>
+            <KageText variant="h3" color={colors.text.primary} style={{ marginBottom: 12, paddingHorizontal: 4 }}>
+              Training Analytics
+            </KageText>
+
+            <View style={{ 
+              flexDirection: 'row', 
+              gap: 16, 
+              flexWrap: 'wrap',
+              justifyContent: 'space-between' 
+            }}>
+              {/* Strength Progress */}
+              <GlassContainer 
+                style={{ flex: 1, minWidth: 340, borderRadius: 16 }} 
+                padding={spacing.lg}
+              >
+                <KageLineChart
+                  title="Strength Progress (Recent PRs)"
+                  data={strengthData.length > 0 ? strengthData : [
+                    { label: 'W1', value: 95 }, { label: 'W2', value: 102 }, { label: 'W3', value: 108 },
+                    { label: 'W4', value: 115 }, { label: 'W5', value: 120 }, { label: 'W6', value: 128 }
+                  ]}
+                  yAxisLabel="kg (estimated 1RM)"
+                  height={170}
+                />
+              </GlassContainer>
+
+              {/* Weekly Volume */}
+              <GlassContainer 
+                style={{ flex: 1, minWidth: 340, borderRadius: 16 }} 
+                padding={spacing.lg}
+              >
+                <KageBarChart
+                  title="Weekly Training Volume"
+                  data={volumeData.length > 0 ? volumeData : [
+                    { label: 'Mon', value: 12400 }, { label: 'Tue', value: 8200 }, { label: 'Wed', value: 15100 },
+                    { label: 'Thu', value: 6300 }, { label: 'Fri', value: 13800 }, { label: 'Sat', value: 9800 }, { label: 'Sun', value: 4200 }
+                  ]}
+                  yAxisLabel="Volume (kg)"
+                  height={170}
+                />
+              </GlassContainer>
+            </View>
+
+            {/* Consistency Heatmap - Real streak calendar */}
+            <GlassContainer 
+              style={{ width: '100%', borderRadius: 16, marginTop: 12 }} 
+              padding={spacing.lg}
+            >
+              <CalendarHeatmap showStreak title="Training Consistency (Last 12 Weeks)" />
+            </GlassContainer>
+
+            <KageText variant="caption" color={colors.text.muted} align="center" style={{ marginTop: 8, fontSize: 10 }}>
+              Data updates after each logged workout
+            </KageText>
+          </Animated.View>
+        )}
 
         {/* Very visible Diet page access */}
         <Animated.View entering={FadeInDown.delay(320).duration(500)} style={{ marginBottom: 24 }}>

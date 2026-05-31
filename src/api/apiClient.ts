@@ -10,7 +10,16 @@ interface RequestOptions extends RequestInit {
 }
 
 async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { token, ...fetchOptions } = options;
+  const { token: explicitToken, ...fetchOptions } = options;
+
+  // Prefer explicit token, otherwise use global auth store
+  let token = explicitToken;
+  if (!token) {
+    try {
+      const { authTokenStore } = await import('../auth/authToken');
+      token = authTokenStore.getToken();
+    } catch {}
+  }
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -81,8 +90,35 @@ export const programsApi = {
   getActive: (token?: string) => apiRequest("/programs/active", { token }),
 };
 
+// ====================== WORKOUTS ======================
+export interface WorkoutSessionPayload {
+  program_id?: string;
+  name: string;
+  duration_seconds: number;
+  exercises: any[]; // matches backend WorkoutExercise shape
+  total_xp?: number;
+  mastery?: any;
+  notes?: string;
+}
+
+export const workoutsApi = {
+  logSession: (data: WorkoutSessionPayload, token?: string) =>
+    apiRequest("/workouts/", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    }),
+
+  getRecent: (token?: string) =>
+    apiRequest("/workouts/recent", { token }),
+
+  getPRs: (token?: string) =>
+    apiRequest("/workouts/prs", { token }),
+};
+
 export default {
   ai: aiApi,
   diet: dietApi,
   programs: programsApi,
+  workouts: workoutsApi,
 };

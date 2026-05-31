@@ -173,6 +173,45 @@ class SupabaseService:
             logger.error(f"Error saving AI report: {e}")
             return None
 
+    # ====================== PERSONAL RECORDS ======================
+    async def upsert_personal_record(self, user_id: str, exercise_name: str, best_weight: float, best_reps: int, best_volume: float) -> Optional[Dict[str, Any]]:
+        if not self.admin:
+            return None
+        try:
+            payload = {
+                "user_id": user_id,
+                "exercise_name": exercise_name,
+                "best_weight": best_weight,
+                "best_reps": best_reps,
+                "best_volume": best_volume,
+                "date": "now()",  # Supabase will use current timestamp
+            }
+            # Use upsert with conflict on (user_id, exercise_name)
+            response = (
+                self.admin.table("personal_records")
+                .upsert(payload, on_conflict="user_id,exercise_name")
+                .execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error upserting personal record for {exercise_name}: {e}")
+            return None
+
+    async def get_user_prs(self, user_id: str) -> List[Dict[str, Any]]:
+        if not self.client:
+            return []
+        try:
+            response = (
+                self.client.table("personal_records")
+                .select("*")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            return response.data or []
+        except Exception as e:
+            logger.error(f"Error fetching PRs: {e}")
+            return []
+
 
 # Global instance
 supabase_service = SupabaseService()

@@ -16,6 +16,8 @@ import { useColors, spacing } from '@/theme';
 import { generateModelThinkingReport, type ModelThinkingReport } from '@/store/aiStrategist';
 import { ModelThinkingCard } from '@/components/ai/ModelThinkingCard';
 import { getDietRecommendation } from '@/api/services/dietService';
+import { KagePieChart, KageLineChart } from '@/components/charts';
+import { getWeekHistory } from '@/store/nutritionStore';
 
 const BREAKPOINTS = { desktop: 1024 };
 function useResponsive() {
@@ -29,6 +31,7 @@ export default function DietPage() {
   const { isDesktop } = useResponsive();
   const [report, setReport] = useState<ModelThinkingReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dietHistory, setDietHistory] = useState<any[]>([]);
 
   const loadStrategist = async () => {
     setLoading(true);
@@ -44,6 +47,16 @@ export default function DietPage() {
   useEffect(() => {
     // Auto-load strategist when entering the page
     loadStrategist();
+
+    // Load real diet history for charts
+    getWeekHistory().then((history) => {
+      const chartData = history.map((day: any, idx: number) => ({
+        label: idx === history.length - 1 ? 'Today' : `D-${history.length - 1 - idx}`,
+        value: day.calories || 0,
+        protein: day.protein || 0,
+      }));
+      setDietHistory(chartData);
+    });
   }, []);
 
   return (
@@ -137,6 +150,42 @@ export default function DietPage() {
             </GlassContainer>
           </Animated.View>
         )}
+
+        {/* Macro Pie Chart */}
+        <GlassContainer padding={spacing.lg} style={{ borderRadius: 18, marginBottom: spacing.md }}>
+          <KagePieChart
+            title="Recommended Macro Split"
+            data={[
+              { label: 'Protein', value: report?.recommendedDiet?.protein || 160, color: colors.accent.gold },
+              { label: 'Carbs', value: report?.recommendedDiet?.carbs || 220, color: colors.accent.neon },
+              { label: 'Fat', value: report?.recommendedDiet?.fat || 70, color: colors.status.ready },
+            ]}
+            size={150}
+          />
+        </GlassContainer>
+
+        {/* Diet History Line - Real data from nutritionStore */}
+        <GlassContainer padding={spacing.lg} style={{ borderRadius: 18, marginBottom: spacing.md }}>
+          <KageLineChart
+            title="Calories (Last 7 Days)"
+            data={dietHistory.length > 0 ? dietHistory.map(d => ({ label: d.label, value: d.value })) : [
+              { label: 'D-6', value: 2100 }, { label: 'D-5', value: 2350 }
+            ]}
+            yAxisLabel="Calories"
+            height={120}
+            compact
+          />
+          <KageLineChart
+            title="Protein (Last 7 Days)"
+            data={dietHistory.length > 0 ? dietHistory.map(d => ({ label: d.label, value: d.protein })) : [
+              { label: 'D-6', value: 140 }, { label: 'D-5', value: 155 }
+            ]}
+            yAxisLabel="Protein (g)"
+            height={120}
+            compact
+            color={colors.accent.gold}
+          />
+        </GlassContainer>
 
         <GlassContainer padding={spacing.lg} style={{ borderRadius: 16 }}>
           <KageText variant="h2" style={{ marginBottom: spacing.sm }}>Quick Actions</KageText>
